@@ -27,7 +27,7 @@ chmod +x simple_deploy.sh
 ./simple_deploy.sh
 
 # 3. 配置API密钥
-nano /opt/quant-trading/config/trading_config.json
+nano /opt/quant-trading/trading_config.json
 
 # 4. 上传源代码
 scp trader.py strategy.py data_loader.py main.py user@your-server-ip:/opt/quant-trading/src/
