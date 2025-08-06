@@ -1,294 +1,234 @@
-# 🚀 智能量化交易系统
+# XNIU.IO 智能量化交易系统
 
-> 安全、简单、高效的量化交易平台
+[![Python](https://img.shields.io/badge/Python-3.6+-blue.svg)](https://www.python.org/)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+[![Platform](https://img.shields.io/badge/Platform-Binance-orange.svg)](https://www.binance.com/)
 
-## 📋 项目简介
+## 🚀 项目概述
 
-本项目是一个完整的智能量化交易系统，支持币安期货交易，提供安全的小额交易测试环境，适合新手学习和功能验证。
+XNIU.IO 是一个基于保守回撤控制策略的智能量化交易系统，专为 Binance 期货交易设计。系统采用先进的机器学习算法和风险管理机制，提供稳定可靠的自动化交易解决方案。
 
 ### ✨ 核心特性
-- 🛡️ **安全交易**: 小额测试，严格风控
-- 📊 **实时监控**: 详细记录，状态跟踪  
-- 🔧 **易于部署**: 一键部署，简化配置
-- 📈 **功能完整**: 策略回测，实盘交易
 
----
+- **🎯 智能策略**: 基于保守回撤控制策略，回测收益率 160.67%，胜率 70.0%
+- **🛡️ 风险控制**: 多层次风险管理，包括止损、止盈、最大回撤控制
+- **📊 实时监控**: 实时数据获取、信号生成、交易执行
+- **🔧 灵活配置**: 支持多种参数配置，适应不同市场环境
+- **📈 性能优化**: 高效的数据处理和算法实现
+- **🔒 安全可靠**: 完善的API验证和错误处理机制
 
-## 🚀 快速开始
+### 📋 功能模块
 
-### 🎯 5分钟快速部署
+- **数据获取**: 实时从 Binance API 获取市场数据
+- **特征工程**: 计算技术指标和特征数据
+- **信号生成**: 基于机器学习模型生成交易信号
+- **风险管理**: 多层次风险控制机制
+- **交易执行**: 自动下单和平仓
+- **监控报告**: 实时状态监控和交易报告
+
+## 🎯 快速开始
+
+### 系统要求
+
+- **操作系统**: CentOS 7/8 或 RHEL 7/8
+- **Python**: 3.6 或更高版本
+- **内存**: 4GB 以上
+- **网络**: 稳定的互联网连接
+
+### 安装步骤
+
+#### 1. 克隆项目
 ```bash
-# 1. 上传简化部署脚本
-scp simple_deploy.sh user@your-server-ip:/home/user/
-
-# 2. 执行部署
-ssh user@your-server-ip
-chmod +x simple_deploy.sh
-./simple_deploy.sh
-
-# 3. 配置API密钥
-nano /opt/quant-trading/trading_config.json
-
-# 4. 上传源代码
-scp trader.py strategy.py data_loader.py main.py user@your-server-ip:/opt/quant-trading/src/
-
-# 5. 启动系统
-sudo systemctl start quant-trading
+git clone https://github.com/knwins/xniu-trading.git
+cd xniu-trading
 ```
 
-### 🧪 本地测试
+#### 2. 安装依赖
 ```bash
-# 演示测试（推荐新手）
-python demo_small_trade.py
-
-# API连接诊断
-python test_api_connection.py
-
-# 完整功能测试
-python test_small_trades.py
+pip install -r requirements.txt
 ```
 
----
-
-## 📁 项目结构
-
-```
-xniu-trading/
-├── 📄 文档文件
-│   ├── 量化交易系统完整部署指南.md    # 详细部署指南
-│   ├── 快速部署指南.md              # 5分钟快速部署
-│   ├── 目录结构说明.md              # 项目结构详解
-│   ├── API_TROUBLESHOOTING.md      # API故障排除
-│   ├── README.md                   # 项目说明
-│   └── README_TRADING.md           # 交易系统说明
-├── 🔧 部署脚本
-│   ├── centos_setup.sh            # 完整部署脚本
-│   └── simple_deploy.sh           # 简化部署脚本
-├── ⚙️ 配置文件
-│   ├── trading_config.json        # 实盘交易配置
-│   ├── small_trade_config.json    # 小额测试配置
-│   └── requirements.txt           # Python依赖
-├── 💻 源代码
-│   ├── main.py                    # 主程序入口
-│   ├── trader.py                  # 交易核心模块
-│   ├── strategy.py                # 交易策略模块
-│   ├── data_loader.py             # 数据加载模块
-│   ├── backtester.py              # 回测系统
-│   ├── feature_engineer.py        # 特征工程
-│   └── version_control.py         # 版本控制
-├── 🧪 测试文件
-│   ├── test_api_connection.py     # API连接测试
-│   ├── test_small_trades.py       # 小额交易测试
-│   ├── demo_small_trade.py        # 演示交易
-│   └── check.py                   # 系统检查
-└── 📋 版本控制
-    ├── VERSION                    # 版本号
-    ├── version.json               # 版本信息
-    └── 版本控制简化说明.md          # 版本控制说明
-```
-
----
-
-## ⚙️ 配置说明
-
-### 演示版配置
-```python
-initial_balance = 1000.0  # 初始资金
-max_position_size = 0.1   # 最大仓位10%
-stop_loss_pct = 0.05      # 止损5%
-take_profit_pct = 0.1     # 止盈10%
-```
-
-### 小额测试配置
-```python
-initial_balance = 100.0   # 初始资金
-max_position_size = 0.05  # 最大仓位5%
-stop_loss_pct = 0.02      # 止损2%
-take_profit_pct = 0.05    # 止盈5%
-max_daily_loss = 0.05     # 日亏损限制5%
-max_drawdown = 0.1        # 最大回撤10%
-```
-
----
-
-## 🛡️ 安全特性
-
-### 风险控制
-- **小额交易**: 最大仓位5%，最小交易10 USDT
-- **严格风控**: 日亏损限制5%，最大回撤10%
-- **精确计算**: 6位小数精度
-- **实时监控**: 详细交易记录
-
-### 监控功能
-- 当前价格显示
-- 仓位状态监控
-- 浮动盈亏计算
-- 交易统计（次数、胜率）
-- 余额变化跟踪
-
----
-
-## 📊 使用流程
-
-### 基本测试流程
-```bash
-# 1. 启动演示测试器
-python demo_small_trade.py
-
-# 2. 查看状态 → 选择: 1
-# 3. 小额买入 → 选择: 2，输入: 10
-# 4. 查看状态 → 选择: 1  
-# 5. 平仓测试 → 选择: 4
-# 6. 查看结果 → 选择: 1
-# 7. 退出系统 → 选择: 6
-```
-
-### 进阶测试流程
-```bash
-# 1. 启动完整测试器
-python test_small_trades.py
-
-# 2. 查看初始状态 → 选择: 1
-# 3. 自定义买入 → 选择: 2，输入: 20
-# 4. 查看状态 → 选择: 1
-# 5. 自定义卖出 → 选择: 3，输入: 15
-# 6. 平仓 → 选择: 4
-# 7. 保存历史 → 选择: 5
-# 8. 查看结果 → 选择: 1
-# 9. 退出系统 → 选择: 6
-```
-
----
-
-## 🔧 故障排除
-
-### 常见问题
-
-| 问题 | 解决方案 |
-|------|----------|
-| API连接失败 | 检查API密钥，确认网络稳定 |
-| 下单失败 | 检查账户余额，确认交易对正确 |
-| 价格获取失败 | 检查网络连接，确认API接口正常 |
-
-### API密钥配置
-1. **登录币安账户**
-2. **生成API密钥**
-   - 进入API管理页面
-   - 创建新的API密钥
-   - 只启用交易权限（不要启用提现权限）
-   - 设置IP白名单（可选）
-
-3. **更新配置文件**
+#### 3. 配置API密钥
+编辑 `trader_config.json` 文件，配置您的 Binance API 密钥：
 ```json
 {
-  "api_key": "你的新API密钥",
-  "secret_key": "你的新密钥", 
+  "api_key": "your-binance-api-key",
+  "secret_key": "your-binance-secret-key",
   "symbol": "ETHUSDT",
-  "initial_balance": 100.0,
-  "max_position_size": 0.05
+  "initial_balance": 1000.0
 }
 ```
 
----
-
-## 📁 日志管理
-
-### 日志文件
-- `trading.log` - 实盘交易日志
-- `test_small_trades.log` - 小额交易测试日志
-- `demo_trade.log` - 演示交易日志
-- `demo_trades_history_*.json` - 演示交易历史数据
-
-### 查看日志
+#### 4. 启动系统
 ```bash
-# 查看最新日志
-tail -f logs/trading.log
-
-# 查看错误日志
-grep "ERROR" logs/trading.log
+python start_trading.py
 ```
 
----
+## 🖥️ 部署选项
+
+### CentOS服务器部署（推荐）
+- 生产环境部署
+- 完整监控和备份
+- 系统服务集成
+
+详细部署指南请参考：[部署文档](README_DEPLOYMENT.md)
+
+## 📊 配置说明
+
+### 交易参数
+
+| 参数 | 说明 | 默认值 |
+|------|------|--------|
+| `symbol` | 交易对 | ETHUSDT |
+| `initial_balance` | 初始资金 | 1000.0 USDT |
+| `max_position_size` | 最大仓位比例 | 10% |
+| `stop_loss_pct` | 止损比例 | 5% |
+| `take_profit_pct` | 止盈比例 | 10% |
+| `max_daily_loss` | 最大日亏损 | 10% |
+| `max_drawdown` | 最大回撤 | 20% |
+
+### 风险控制
+
+系统采用多层次风险控制机制：
+
+1. **仓位控制**: 限制单次交易的最大仓位
+2. **止损止盈**: 自动设置止损和止盈点位
+3. **日亏损限制**: 防止单日过度亏损
+4. **回撤控制**: 监控最大回撤，触发保护机制
+5. **信号冷却**: 避免频繁交易
+
+## 🔧 管理操作
+
+### 基本命令
+
+```bash
+# 启动交易系统
+python start_trading.py
+
+# 查看配置
+python start_trading.py --config
+
+# 测试API连接
+python start_trading.py --test-api
+```
+
+### 服务器部署管理
+
+```bash
+# 启动服务
+/opt/xniu-trading/manage.sh start
+
+# 查看状态
+/opt/xniu-trading/manage.sh status
+
+# 查看日志
+/opt/xniu-trading/manage.sh logs
+
+# 编辑配置
+/opt/xniu-trading/manage.sh config
+```
+
+## 📈 监控和维护
+
+### 日志监控
+
+- **系统日志**: 记录系统运行状态
+- **交易日志**: 记录所有交易操作
+- **错误日志**: 记录异常和错误信息
+
+### 性能监控
+
+- **API连接状态**: 实时监控API连接
+- **交易执行情况**: 监控交易成功率
+- **系统资源使用**: 监控CPU、内存使用
+
+### 备份策略
+
+- **自动备份**: 每天自动备份配置和日志
+- **手动备份**: 支持手动备份重要数据
+- **恢复机制**: 提供数据恢复功能
+
+## 🚨 故障排除
+
+### 常见问题
+
+1. **API连接失败**
+   - 检查网络连接
+   - 验证API密钥
+   - 确认IP白名单设置
+
+2. **服务启动失败**
+   - 检查配置文件格式
+   - 验证依赖安装
+   - 查看错误日志
+
+3. **交易执行异常**
+   - 检查账户余额
+   - 验证交易权限
+   - 确认交易参数
+
+### 获取帮助
+
+- 📖 [部署文档](README_DEPLOYMENT.md)
+- 🐛 [问题反馈](https://github.com/knwins/xniu-trading/issues)
+- 📧 [技术支持](mailto:support@xniu.io)
 
 ## 🔒 安全建议
 
-### ⚠️ 重要提醒
-1. **小额测试**: 建议使用10-50 USDT进行测试
-2. **实时监控**: 密切关注交易状态和盈亏
-3. **及时平仓**: 测试完成后及时平仓
-4. **备份配置**: 测试前备份重要配置文件
+### API安全
+- 使用最小权限原则
+- 定期更换API密钥
+- 设置IP白名单
+- 监控API使用情况
 
-### 🔒 安全措施
-1. **API权限**: 确保API只有交易权限，无提现权限
-2. **资金限制**: 使用小额资金进行测试
-3. **网络稳定**: 确保网络连接稳定
-4. **日志记录**: 所有交易都会记录到日志文件
+### 系统安全
+- 使用非root用户运行
+- 配置防火墙规则
+- 定期更新系统补丁
+- 监控异常登录
 
----
+### 数据安全
+- 定期备份重要数据
+- 加密敏感配置文件
+- 限制文件访问权限
+- 监控文件变化
 
-## 🎯 版本控制
+## 📄 许可证
 
-### 快速使用
-```bash
-# 查看当前状态
-python version_control.py
+本项目采用 MIT 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情。
 
-# 更新版本号
-python version_control.py  # 选择选项 2
+## 🤝 贡献
 
-# 更新所有文件  
-python version_control.py  # 选择选项 3
-```
+欢迎贡献代码！请查看 [贡献指南](CONTRIBUTING.md) 了解如何参与项目开发。
 
-### 核心文件
-- `VERSION` - 版本号存储
-- `version.json` - 版本信息
-- `version_control.py` - 统一管理工具
+### 贡献方式
 
----
+1. Fork 项目
+2. 创建功能分支 (`git checkout -b feature/AmazingFeature`)
+3. 提交更改 (`git commit -m 'Add some AmazingFeature'`)
+4. 推送到分支 (`git push origin feature/AmazingFeature`)
+5. 打开 Pull Request
 
-## 📈 使用场景
+## 📞 联系我们
 
-### 1. 新手学习
-- 使用演示版本熟悉界面
-- 了解交易流程
-- 学习风险控制
+- **官网**: [https://xniu.io](https://xniu.io)
+- **邮箱**: support@xniu.io
+- **GitHub**: [https://github.com/knwins/xniu-trading](https://github.com/knwins/xniu-trading)
 
-### 2. 功能验证
-- 测试买入卖出功能
-- 验证风控机制
-- 检查API连接
+## ⚠️ 免责声明
 
-### 3. 小额实践
-- 真实小额交易练习
-- 积累交易经验
-- 测试策略效果
+**重要提醒**: 
 
----
+1. **风险提示**: 加密货币交易存在高风险，可能导致资金损失
+2. **资金安全**: 只使用您能够承受损失的资金进行交易
+3. **测试验证**: 建议先在测试环境验证系统功能
+4. **定期维护**: 定期检查和维护系统，确保稳定运行
+5. **法律合规**: 请确保您的交易活动符合当地法律法规
 
-## 📞 技术支持
-
-如遇到问题，请检查：
-1. 系统日志: `tail -f logs/trading.log`
-2. 演示测试: `python demo_small_trade.py`
-3. API测试: `python test_api_connection.py`
-4. 完整测试: `python test_small_trades.py`
-
-**注意**: 本系统仅供学习和测试使用，请谨慎进行真实交易。
+本软件仅供学习和研究使用，作者不对使用本软件造成的任何损失承担责任。
 
 ---
 
-## 📝 更新日志
-
-### v1.0.1 (2025-08-06)
-- 初始版本发布
-- 完整的小额交易测试系统
-- 演示版和完整版测试工具
-- API连接诊断功能
-- 统一时区配置 (香港时区)
-- 简化版本控制系统
-- 整合小额交易测试指南
-
----
-
-**智能量化交易系统 v1.0.1** - 安全、简单、高效的交易测试平台 
+**版本**: v1.0  
+**更新时间**: 2025-08-06  
+**维护团队**: XNIU.IO Development Team 

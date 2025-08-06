@@ -135,7 +135,7 @@ logs/
 trading.log
 
 # 配置文件（包含敏感信息）
-trading_config.json
+trader_config.json
 config.json
 .env.local
 .env.production

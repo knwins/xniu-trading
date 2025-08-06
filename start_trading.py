@@ -56,37 +56,114 @@ def configure_trading():
     print("\n📋 配置交易参数")
     print("=" * 50)
     
+    # 加载现有配置
+    existing_config = load_config()
+    if existing_config:
+        print("📋 检测到现有配置，输入为空时将保持原值")
+    
     config = {}
     
     # API配置
     print("\n🔑 API配置:")
-    config['api_key'] = get_user_input("请输入您的API密钥")
-    config['secret_key'] = get_user_input("请输入您的密钥")
+    
+    # API key 格式验证
+    while True:
+        current_api_key = existing_config.get('api_key', '') if existing_config else ''
+        api_key = get_user_input("请输入您的API密钥", current_api_key)
+        if not api_key:
+            print("❌ API密钥不能为空")
+            continue
+        
+        # 验证API key格式
+        if len(api_key) < 20:
+            print("❌ API密钥长度不足，请检查是否正确")
+            continue
+        
+        if not api_key.isalnum():
+            print("❌ API密钥格式不正确，应只包含字母和数字")
+            continue
+        
+        config['api_key'] = api_key
+        break
+    
+    # Secret key 格式验证
+    while True:
+        current_secret_key = existing_config.get('secret_key', '') if existing_config else ''
+        secret_key = get_user_input("请输入您的密钥", current_secret_key)
+        if not secret_key:
+            print("❌ 密钥不能为空")
+            continue
+        
+        # 验证Secret key格式
+        if len(secret_key) < 20:
+            print("❌ 密钥长度不足，请检查是否正确")
+            continue
+        
+        if not secret_key.isalnum():
+            print("❌ 密钥格式不正确，应只包含字母和数字")
+            continue
+        
+        config['secret_key'] = secret_key
+        break
+    
+    # 测试API连接
+    print("\n🔍 测试API连接...")
+    try:
+        from trader import Trader
+        test_trader = Trader(config)
+        if test_trader.test_api_connection():
+            print("✅ API连接测试成功")
+        else:
+            print("❌ API连接测试失败，请检查网络连接")
+    except Exception as e:
+        print(f"❌ API连接测试异常: {e}")
     
     # 交易参数
     print("\n💰 交易参数:")
-    config['symbol'] = get_user_input("交易对", "ETHUSDT")
-    config['initial_balance'] = float(get_user_input("初始资金(USDT)", "1000"))
-    config['max_position_size'] = float(get_user_input("最大仓位比例(0.1=10%)", "0.1"))
+    current_symbol = existing_config.get('symbol', 'ETHUSDT') if existing_config else 'ETHUSDT'
+    config['symbol'] = get_user_input("交易对", current_symbol)
+    
+    current_balance = existing_config.get('initial_balance', 1000) if existing_config else 1000
+    balance_input = get_user_input("初始资金(USDT)", str(current_balance))
+    config['initial_balance'] = float(balance_input) if balance_input else current_balance
+    
+    current_position = existing_config.get('max_position_size', 0.1) if existing_config else 0.1
+    position_input = get_user_input("最大仓位比例(0.1=10%)", str(current_position))
+    config['max_position_size'] = float(position_input) if position_input else current_position
     
     # 风险控制
     print("\n🛡️ 风险控制:")
-    config['stop_loss_pct'] = float(get_user_input("止损比例(0.05=5%)", "0.05"))
-    config['take_profit_pct'] = float(get_user_input("止盈比例(0.1=10%)", "0.1"))
-    config['max_daily_loss'] = float(get_user_input("最大日亏损(0.1=10%)", "0.1"))
-    config['max_drawdown'] = float(get_user_input("最大回撤(0.2=20%)", "0.2"))
+    current_stop_loss = existing_config.get('stop_loss_pct', 0.05) if existing_config else 0.05
+    stop_loss_input = get_user_input("止损比例(0.05=5%)", str(current_stop_loss))
+    config['stop_loss_pct'] = float(stop_loss_input) if stop_loss_input else current_stop_loss
+    
+    current_take_profit = existing_config.get('take_profit_pct', 0.1) if existing_config else 0.1
+    take_profit_input = get_user_input("止盈比例(0.1=10%)", str(current_take_profit))
+    config['take_profit_pct'] = float(take_profit_input) if take_profit_input else current_take_profit
+    
+    current_daily_loss = existing_config.get('max_daily_loss', 0.1) if existing_config else 0.1
+    daily_loss_input = get_user_input("最大日亏损(0.1=10%)", str(current_daily_loss))
+    config['max_daily_loss'] = float(daily_loss_input) if daily_loss_input else current_daily_loss
+    
+    current_drawdown = existing_config.get('max_drawdown', 0.2) if existing_config else 0.2
+    drawdown_input = get_user_input("最大回撤(0.2=20%)", str(current_drawdown))
+    config['max_drawdown'] = float(drawdown_input) if drawdown_input else current_drawdown
     
     # 其他设置
     print("\n⚙️ 其他设置:")
-    config['signal_cooldown'] = int(get_user_input("信号冷却时间(秒)", "300"))
-    config['base_url'] = get_user_input("API基础URL", "https://fapi.binance.com")
+    current_cooldown = existing_config.get('signal_cooldown', 300) if existing_config else 300
+    cooldown_input = get_user_input("信号冷却时间(秒)", str(current_cooldown))
+    config['signal_cooldown'] = int(cooldown_input) if cooldown_input else current_cooldown
+    
+    current_url = existing_config.get('base_url', 'https://fapi.binance.com') if existing_config else 'https://fapi.binance.com'
+    config['base_url'] = get_user_input("API基础URL", current_url)
     
     return config
 
 def save_config(config: dict, filename: str = None):
     """保存配置"""
     if filename is None:
-        filename = os.path.join(os.path.dirname(os.path.abspath(__file__)), "trading_config.json")
+        filename = os.path.join(os.path.dirname(os.path.abspath(__file__)), "trader_config.json")
     try:
         with open(filename, 'w', encoding='utf-8') as f:
             json.dump(config, f, ensure_ascii=False, indent=2)
@@ -99,7 +176,7 @@ def save_config(config: dict, filename: str = None):
 def load_config(filename: str = None) -> dict:
     """加载配置"""
     if filename is None:
-        filename = os.path.join(os.path.dirname(os.path.abspath(__file__)), "trading_config.json")
+        filename = os.path.join(os.path.dirname(os.path.abspath(__file__)), "trader_config.json")
     try:
         if os.path.exists(filename):
             with open(filename, 'r', encoding='utf-8') as f:
@@ -137,36 +214,71 @@ def confirm_start():
     confirm = input("\n是否确认开始实盘交易? (y/N): ").strip().lower()
     return confirm in ['y', 'yes', '是']
 
-def run_demo_mode():
-    """运行演示模式"""
-    print("\n🎮 演示模式")
+def validate_api_credentials(config: dict) -> bool:
+    """验证API凭据"""
+    print("\n🔍 API凭据验证")
     print("=" * 50)
-    print("演示模式将模拟交易，不会执行真实交易")
-    print("用于测试系统功能和策略表现")
     
-    # 创建演示配置
-    demo_config = {
-        'api_key': 'DEMO_KEY',
-        'secret_key': 'DEMO_SECRET',
-        'base_url': 'https://fapi.binance.com',
-        'symbol': 'ETHUSDT',
-        'initial_balance': 1000,
-        'max_position_size': 0.1,
-        'stop_loss_pct': 0.05,
-        'take_profit_pct': 0.1,
-        'max_daily_loss': 0.1,
-        'max_drawdown': 0.2,
-        'signal_cooldown': 300,
-        'demo_mode': True
-    }
+    # 检查配置完整性
+    required_fields = ['api_key', 'secret_key', 'base_url']
+    for field in required_fields:
+        if field not in config or not config[field]:
+            print(f"❌ 缺少必要配置: {field}")
+            return False
     
-    print_config_summary(demo_config)
+    # 验证API key格式
+    api_key = config['api_key']
+    secret_key = config['secret_key']
     
-    if confirm_start():
-        print("\n🚀 启动演示模式...")
-        # 这里可以添加演示模式的逻辑
-        print("演示模式功能开发中...")
-        print("请使用实盘模式进行测试")
+    print(f"📋 API Key: {api_key[:8]}...{api_key[-4:]}")
+    print(f"📋 Secret Key: {secret_key[:8]}...{secret_key[-4:]}")
+    print(f"🌐 API URL: {config['base_url']}")
+    
+    # 格式验证
+    if len(api_key) < 20:
+        print("❌ API Key长度不足")
+        return False
+    
+    if len(secret_key) < 20:
+        print("❌ Secret Key长度不足")
+        return False
+    
+    if not api_key.isalnum():
+        print("❌ API Key格式不正确")
+        return False
+    
+    if not secret_key.isalnum():
+        print("❌ Secret Key格式不正确")
+        return False
+    
+    print("✅ 格式验证通过")
+    
+    # 连接测试
+    try:
+        from trader import Trader
+        trader = Trader(config)
+        
+        print("\n🔍 测试网络连接...")
+        import requests
+        response = requests.get(f"{config['base_url']}/fapi/v1/time", timeout=5)
+        if response.status_code == 200:
+            print("✅ 网络连接正常")
+        else:
+            print(f"❌ 网络连接失败: {response.status_code}")
+            return False
+        
+        print("\n🔍 验证API密钥...")
+        if trader.test_api_connection():
+            print("✅ API密钥验证成功")
+            return True
+        else:
+            print("❌ API密钥验证失败")
+            return False
+            
+    except Exception as e:
+        print(f"❌ 验证过程异常: {e}")
+        return False
+
 
 def main():
     """主函数"""
@@ -176,8 +288,8 @@ def main():
         print("\n请选择操作:")
         print("1. 🚀 开始实盘交易")
         print("2. ⚙️ 配置交易参数")
-        print("3. 🎮 演示模式")
-        print("4. 📊 查看配置")
+        print("3. 📊 查看配置")
+        print("4. 🔍 测试API连接")
         print("5. ❌ 退出")
         
         choice = input("\n请输入选择 (1-5): ").strip()
@@ -211,14 +323,22 @@ def main():
                 print_config_summary(config)
         
         elif choice == '3':
-            # 演示模式
-            run_demo_mode()
-        
-        elif choice == '4':
             # 查看配置
             config = load_config()
             if config:
                 print_config_summary(config)
+        
+        elif choice == '4':
+            # 测试API连接
+            config = load_config()
+            if not config:
+                print("❌ 请先配置交易参数")
+                continue
+            
+            if validate_api_credentials(config):
+                print("\n✅ API凭据验证完全通过！")
+            else:
+                print("\n❌ API凭据验证失败，请检查配置")
         
         elif choice == '5':
             # 退出

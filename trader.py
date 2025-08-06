@@ -138,43 +138,135 @@ class Trader:
         
         try:
             if method == 'GET':
-                response = requests.get(url, params=params, headers=headers)
+                response = requests.get(url, params=params, headers=headers, timeout=10)
             elif method == 'POST':
-                response = requests.post(url, params=params, headers=headers)
+                response = requests.post(url, params=params, headers=headers, timeout=10)
             else:
                 raise ValueError(f"不支持的HTTP方法: {method}")
             
-            response.raise_for_status()
-            return response.json()
+            # 检查HTTP状态码
+            if response.status_code != 200:
+                error_msg = f"HTTP错误 {response.status_code}"
+                try:
+                    error_data = response.json()
+                    if 'msg' in error_data:
+                        error_msg += f": {error_data['msg']}"
+                except:
+                    error_msg += f": {response.text}"
+                
+                logger.error(f"API请求失败: {error_msg}")
+                raise requests.exceptions.HTTPError(error_msg)
+            
+            # 解析响应
+            try:
+                data = response.json()
+                return data
+            except json.JSONDecodeError as e:
+                logger.error(f"响应解析失败: {e}")
+                return None
         
+        except requests.exceptions.Timeout:
+            logger.error("API请求超时")
+            raise
+        except requests.exceptions.ConnectionError:
+            logger.error("API连接失败")
+            raise
         except requests.exceptions.RequestException as e:
-            logger.error(f"API请求失败: {e}")
-            return None
+            logger.error(f"API请求异常: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"未知错误: {e}")
+            raise
     
     def get_account_info(self) -> Dict:
         """获取账户信息"""
-        endpoint = '/fapi/v2/account'
-        return self._make_request('GET', endpoint, signed=True)
+        try:
+            endpoint = '/fapi/v2/account'
+            response = self._make_request('GET', endpoint, signed=True)
+            
+            if response:
+                # 提取关键账户信息
+                account_info = {
+                    'totalWalletBalance': response.get('totalWalletBalance', '0'),
+                    'availableBalance': response.get('availableBalance', '0'),
+                    'totalUnrealizedProfit': response.get('totalUnrealizedProfit', '0'),
+                    'totalMarginBalance': response.get('totalMarginBalance', '0'),
+                    'totalInitialMargin': response.get('totalInitialMargin', '0'),
+                    'totalMaintMargin': response.get('totalMaintMargin', '0'),
+                    'totalPositionInitialMargin': response.get('totalPositionInitialMargin', '0'),
+                    'totalOpenOrderInitialMargin': response.get('totalOpenOrderInitialMargin', '0'),
+                    'totalCrossWalletBalance': response.get('totalCrossWalletBalance', '0'),
+                    'totalCrossUnPnl': response.get('totalCrossUnPnl', '0'),
+                    'availableBalance': response.get('availableBalance', '0'),
+                    'maxWithdrawAmount': response.get('maxWithdrawAmount', '0'),
+                    'updateTime': response.get('updateTime', 0)
+                }
+                
+                # 更新当前余额
+                try:
+                    self.current_balance = float(account_info['availableBalance'])
+                except (ValueError, KeyError):
+                    self.current_balance = self.initial_balance
+                
+                logger.info(f"账户余额更新: {self.current_balance:.2f} USDT")
+                return account_info
+            else:
+                logger.error("获取账户信息失败")
+                return None
+                
+        except Exception as e:
+            logger.error(f"获取账户信息异常: {e}")
+            return None
     
     def test_api_connection(self) -> bool:
-        """测试API连接"""
+        """测试API连接和验证API密钥"""
         try:
-            # 测试服务器时间
-            response = requests.get(f"{self.base_url}/fapi/v1/time")
-            if response.status_code == 200:
-                logger.info("API连接测试成功")
-                return True
-            else:
-                logger.error(f"API连接测试失败: {response.status_code}")
+            # 1. 测试服务器连接
+            print("🔍 测试服务器连接...")
+            response = requests.get(f"{self.base_url}/fapi/v1/time", timeout=10)
+            if response.status_code != 200:
+                logger.error(f"服务器连接失败: {response.status_code}")
                 return False
+            print("✅ 服务器连接成功")
+            
+            # 2. 测试API密钥有效性（通过获取账户信息）
+            print("🔍 验证API密钥...")
+            try:
+                account_info = self.get_account_info()
+                if account_info:
+                    print("✅ API密钥验证成功")
+                    logger.info("API连接和密钥验证成功")
+                    return True
+                else:
+                    print("❌ API密钥验证失败")
+                    logger.error("API密钥验证失败")
+                    return False
+            except Exception as e:
+                if "Invalid API-key" in str(e) or "Invalid signature" in str(e):
+                    print("❌ API密钥无效或签名错误")
+                    logger.error("API密钥无效或签名错误")
+                else:
+                    print(f"❌ API密钥验证异常: {e}")
+                    logger.error(f"API密钥验证异常: {e}")
+                return False
+                
+        except requests.exceptions.Timeout:
+            print("❌ 连接超时，请检查网络")
+            logger.error("API连接超时")
+            return False
+        except requests.exceptions.ConnectionError:
+            print("❌ 网络连接失败，请检查网络设置")
+            logger.error("API网络连接失败")
+            return False
         except Exception as e:
+            print(f"❌ API连接测试异常: {e}")
             logger.error(f"API连接测试异常: {e}")
             return False
     
     def get_current_price(self) -> float:
         """获取当前价格"""
         try:
-            endpoint = '/fapi/v1/ticker/price'
+            endpoint = '/fapi/v2/ticker/price'  # 使用合约API端点
             params = {'symbol': self.symbol}
             response = self._make_request('GET', endpoint, params)
             
@@ -190,7 +282,7 @@ class Trader:
     def get_klines(self, interval: str = '1h', limit: int = 100) -> pd.DataFrame:
         """获取K线数据"""
         try:
-            endpoint = '/fapi/v1/klines'
+            endpoint = '/fapi/v1/klines'  # 使用合约API端点
             params = {
                 'symbol': self.symbol,
                 'interval': interval,
@@ -380,19 +472,23 @@ class Trader:
         """生成交易信号"""
         try:
             # 获取K线数据
-            df = self.get_klines(interval='1h', limit=100)
+            df = self.get_klines(interval='1h', limit=500)
             if df.empty:
                 logger.warning("无法获取K线数据")
                 return 0, 0.0
             
             # 计算特征
+            logger.info(f"开始计算特征，数据长度: {len(df)}")
             features = self.feature_engineer.calculate_features(df)
             if features is None or features.empty:
                 logger.warning("特征计算失败")
                 return 0, 0.0
             
+            logger.info(f"特征计算成功，特征数据长度: {len(features)}")
+            
             # 生成信号
-            signal, strength = self.strategy.generate_signal(features)
+            signal = self.strategy.get_signal(features)
+            strength = 0.5  # 默认信号强度
             
             # 记录信号
             signal_record = {
@@ -569,9 +665,9 @@ class Trader:
 def create_trader_config():
     """创建交易配置"""
     return {
-        'api_key': 'your_api_key',
-        'secret_key': 'your_secret_key',
-        'base_url': 'https://fapi.binance.com',
+        'api_key': '',  # 留空，使用公开API
+        'secret_key': '',  # 留空，使用公开API
+        'base_url': 'https://fapi.binance.com',  # 使用合约API
         'symbol': 'ETHUSDT',
         'initial_balance': 1000,
         'max_position_size': 0.1,
