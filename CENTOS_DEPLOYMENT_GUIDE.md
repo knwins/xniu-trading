@@ -15,7 +15,7 @@
 ### 软件要求
 - **操作系统**: CentOS 7/8 或 RHEL 7/8
 - **Python**: 3.6+
-- **权限**: 具有sudo权限的非root用户
+- **权限**: root用户或具有sudo权限的用户
 
 ## 部署步骤
 
@@ -26,7 +26,15 @@
 ssh username@your-server-ip
 ```
 
-#### 1.2 创建部署用户（可选）
+#### 1.2 选择部署方式
+
+**方式一：使用root用户（推荐）**
+```bash
+# 直接使用root用户登录
+sudo su -
+```
+
+**方式二：使用普通用户（需要sudo权限）**
 ```bash
 # 创建新用户
 sudo useradd -m -s /bin/bash xniu

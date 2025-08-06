@@ -31,7 +31,10 @@ log_step() {
 # 检查是否为root用户
 check_root() {
     if [[ $EUID -eq 0 ]]; then
-        log_error "请不要使用root用户运行此脚本"
+        log_warn "检测到root用户，将使用root权限进行部署"
+        # 允许root用户运行，但给出警告
+    else
+        log_error "请使用root用户或sudo权限运行此脚本"
         exit 1
     fi
 }
@@ -60,7 +63,11 @@ check_system() {
 # 更新系统
 update_system() {
     log_step "更新系统包..."
-    sudo yum update -y
+    if [[ $EUID -eq 0 ]]; then
+        yum update -y
+    else
+        sudo yum update -y
+    fi
     log_info "系统更新完成"
 }
 
@@ -68,20 +75,39 @@ update_system() {
 install_dependencies() {
     log_step "安装基础依赖..."
     
-    # 安装EPEL仓库
-    sudo yum install -y epel-release
-    
-    # 安装基础工具
-    sudo yum install -y wget curl git vim unzip
-    
-    # 安装开发工具
-    sudo yum groupinstall -y "Development Tools"
-    
-    # 安装Python相关
-    sudo yum install -y python3 python3-pip python3-devel
-    
-    # 安装其他必要包
-    sudo yum install -y openssl-devel libffi-devel
+    if [[ $EUID -eq 0 ]]; then
+        # root用户直接安装
+        # 安装EPEL仓库
+        yum install -y epel-release
+        
+        # 安装基础工具
+        yum install -y wget curl git vim unzip
+        
+        # 安装开发工具
+        yum groupinstall -y "Development Tools"
+        
+        # 安装Python相关
+        yum install -y python3 python3-pip python3-devel
+        
+        # 安装其他必要包
+        yum install -y openssl-devel libffi-devel
+    else
+        # 非root用户使用sudo
+        # 安装EPEL仓库
+        sudo yum install -y epel-release
+        
+        # 安装基础工具
+        sudo yum install -y wget curl git vim unzip
+        
+        # 安装开发工具
+        sudo yum groupinstall -y "Development Tools"
+        
+        # 安装Python相关
+        sudo yum install -y python3 python3-pip python3-devel
+        
+        # 安装其他必要包
+        sudo yum install -y openssl-devel libffi-devel
+    fi
     
     log_info "基础依赖安装完成"
 }
@@ -104,10 +130,19 @@ create_project_dir() {
     log_step "创建项目目录..."
     
     PROJECT_DIR="/opt/xniu-trading"
-    sudo mkdir -p $PROJECT_DIR
-    sudo chown $USER:$USER $PROJECT_DIR
     
-    log_info "项目目录创建完成: $PROJECT_DIR"
+    if [[ $EUID -eq 0 ]]; then
+        # root用户直接创建
+        mkdir -p $PROJECT_DIR
+        # 设置适当的权限，允许其他用户访问
+        chmod 755 $PROJECT_DIR
+        log_info "项目目录创建完成: $PROJECT_DIR (root权限)"
+    else
+        # 非root用户使用sudo
+        sudo mkdir -p $PROJECT_DIR
+        sudo chown $USER:$USER $PROJECT_DIR
+        log_info "项目目录创建完成: $PROJECT_DIR"
+    fi
 }
 
 # 创建虚拟环境
@@ -145,7 +180,33 @@ create_systemd_service() {
     
     SERVICE_FILE="/etc/systemd/system/xniu-trading.service"
     
-    sudo tee $SERVICE_FILE > /dev/null <<EOF
+    if [[ $EUID -eq 0 ]]; then
+        # root用户直接创建
+        tee $SERVICE_FILE > /dev/null <<EOF
+[Unit]
+Description=XNIU.IO Trading System
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=$PROJECT_DIR
+Environment=PATH=$PROJECT_DIR/venv/bin
+ExecStart=$PROJECT_DIR/venv/bin/python start_trading.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+        # 重新加载systemd
+        systemctl daemon-reload
+    else
+        # 非root用户使用sudo
+        sudo tee $SERVICE_FILE > /dev/null <<EOF
 [Unit]
 Description=XNIU.IO Trading System
 After=network.target
@@ -165,8 +226,9 @@ StandardError=journal
 WantedBy=multi-user.target
 EOF
 
-    # 重新加载systemd
-    sudo systemctl daemon-reload
+        # 重新加载systemd
+        sudo systemctl daemon-reload
+    fi
     
     log_info "系统服务创建完成"
 }
@@ -179,7 +241,22 @@ setup_logging() {
     mkdir -p /var/log/xniu-trading
     
     # 创建日志轮转配置
-    sudo tee /etc/logrotate.d/xniu-trading > /dev/null <<EOF
+    if [[ $EUID -eq 0 ]]; then
+        # root用户直接创建
+        tee /etc/logrotate.d/xniu-trading > /dev/null <<EOF
+/var/log/xniu-trading/*.log {
+    daily
+    missingok
+    rotate 30
+    compress
+    delaycompress
+    notifempty
+    create 644 root root
+}
+EOF
+    else
+        # 非root用户使用sudo
+        sudo tee /etc/logrotate.d/xniu-trading > /dev/null <<EOF
 /var/log/xniu-trading/*.log {
     daily
     missingok
@@ -190,6 +267,7 @@ setup_logging() {
     create 644 $USER $USER
 }
 EOF
+    fi
 
     log_info "日志配置完成"
 }
@@ -200,11 +278,21 @@ setup_firewall() {
     
     # 检查防火墙状态
     if command -v firewall-cmd &> /dev/null; then
-        # 开放SSH端口（如果还没开放）
-        sudo firewall-cmd --permanent --add-service=ssh
-        
-        # 重新加载防火墙
-        sudo firewall-cmd --reload
+        if [[ $EUID -eq 0 ]]; then
+            # root用户直接配置
+            # 开放SSH端口（如果还没开放）
+            firewall-cmd --permanent --add-service=ssh
+            
+            # 重新加载防火墙
+            firewall-cmd --reload
+        else
+            # 非root用户使用sudo
+            # 开放SSH端口（如果还没开放）
+            sudo firewall-cmd --permanent --add-service=ssh
+            
+            # 重新加载防火墙
+            sudo firewall-cmd --reload
+        fi
         
         log_info "防火墙配置完成"
     else
