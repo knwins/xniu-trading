@@ -30,7 +30,7 @@
 #### 2.1 检查API密钥
 ```bash
 # 运行API测试脚本
-python test/test_api_connection.py
+python demo_small_trade.py
 ```
 
 #### 2.2 配置IP白名单
@@ -88,7 +88,7 @@ wget -qO- ifconfig.me
 
 ### 步骤1: 运行API测试
 ```bash
-python test/test_api_connection.py
+python test_api_connection.py
 ```
 
 ### 步骤2: 检查网络连接
@@ -103,7 +103,8 @@ curl https://fapi.binance.com/fapi/v1/ping
 ### 步骤3: 验证配置
 ```bash
 # 检查配置文件
-cat config/trading_config.json
+cat trading_config.json
+cat small_trade_config.json
 ```
 
 ### 步骤4: 检查时间同步
@@ -119,7 +120,7 @@ date
 
 ### 1. API测试脚本
 ```bash
-python test/test_api_connection.py
+python test_api_connection.py
 ```
 
 ### 2. 配置验证脚本
@@ -128,21 +129,27 @@ import json
 import os
 
 def validate_config():
-    config_file = 'config/trading_config.json'
-    if not os.path.exists(config_file):
-        print("❌ 配置文件不存在")
-        return False
+    config_files = ['trading_config.json', 'small_trade_config.json']
     
-    with open(config_file, 'r') as f:
-        config = json.load(f)
+    for config_file in config_files:
+        if not os.path.exists(config_file):
+            print(f"❌ 配置文件不存在: {config_file}")
+            continue
+        
+        with open(config_file, 'r') as f:
+            config = json.load(f)
+        
+        required_fields = ['api_key', 'secret_key', 'base_url']
+        missing_fields = []
+        for field in required_fields:
+            if field not in config:
+                missing_fields.append(field)
+        
+        if missing_fields:
+            print(f"❌ {config_file} 缺少必要字段: {missing_fields}")
+        else:
+            print(f"✅ {config_file} 配置文件格式正确")
     
-    required_fields = ['api_key', 'secret_key', 'base_url']
-    for field in required_fields:
-        if field not in config:
-            print(f"❌ 缺少必要字段: {field}")
-            return False
-    
-    print("✅ 配置文件格式正确")
     return True
 
 if __name__ == "__main__":

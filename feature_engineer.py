@@ -353,6 +353,10 @@ class FeatureEngineer:
         
         return pain_ratio
 
+    def calculate_features(self, klines):
+        """计算特征 - 兼容性方法，调用 add_features"""
+        return self.add_features(klines)
+
     def add_features(self, klines):
         """给 K 线数据添加技术指标特征"""
         df = klines.copy()

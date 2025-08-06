@@ -31,11 +31,16 @@ from strategy import ConservativeDrawdownControlStrategy
 from backtester import Backtester
 
 # 配置日志
+import os
+log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logs')
+os.makedirs(log_dir, exist_ok=True)
+log_file = os.path.join(log_dir, 'trading.log')
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('../logs/trading.log', encoding='utf-8'),
+        logging.FileHandler(log_file, encoding='utf-8'),
         logging.StreamHandler()
     ]
 )
@@ -539,7 +544,9 @@ class Trader:
         """保存交易历史"""
         if filename is None:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"../logs/trade_history_{timestamp}.json"
+            log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logs')
+            os.makedirs(log_dir, exist_ok=True)
+            filename = os.path.join(log_dir, f"trade_history_{timestamp}.json")
         
         try:
             with open(filename, 'w', encoding='utf-8') as f:

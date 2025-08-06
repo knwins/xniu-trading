@@ -83,7 +83,9 @@ def configure_trading():
     
     return config
 
-def save_config(config: dict, filename: str = "../config/trading_config.json"):
+def save_config(config: dict, filename: str = None):
+    if filename is None:
+        filename = os.path.join(os.path.dirname(os.path.abspath(__file__)), "trading_config.json")
     """保存配置"""
     try:
         with open(filename, 'w', encoding='utf-8') as f:
@@ -94,7 +96,9 @@ def save_config(config: dict, filename: str = "../config/trading_config.json"):
         print(f"❌ 保存配置失败: {e}")
         return False
 
-def load_config(filename: str = "../config/trading_config.json") -> dict:
+def load_config(filename: str = None) -> dict:
+    if filename is None:
+        filename = os.path.join(os.path.dirname(os.path.abspath(__file__)), "trading_config.json")
     """加载配置"""
     try:
         if os.path.exists(filename):

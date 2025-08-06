@@ -1,0 +1,28 @@
+{
+  "version": "1.0.1",
+  "release_date": "2025-08-06",
+  "files": {
+    "python_files": [
+      "main.py",
+      "trader.py",
+      "start_trading.py",
+      "data_loader.py",
+      "feature_engineer.py",
+      "strategy.py",
+      "backtester.py",
+      "demo_small_trade.py"
+    ],
+    "md_files": [
+      "README.md",
+      "README_TRADING.md",
+      "API_TROUBLESHOOTING.md",
+      "量化交易系统完整部署指南.md"
+    ],
+    "config_files": [
+      "requirements.txt",
+      "trading_config.json",
+      "centos_setup.sh"
+    ]
+  },
+  "description": "智能量化交易系统 - 统一版本控制"
+}

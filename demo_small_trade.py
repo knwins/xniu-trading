@@ -11,11 +11,16 @@ import logging
 import random
 from datetime import datetime
 # 配置日志
+import os
+log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logs')
+os.makedirs(log_dir, exist_ok=True)
+log_file = os.path.join(log_dir, 'demo_trade.log')
+
 logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(levelname)s - %(message)s',
     handlers=[
-        logging.FileHandler('../logs/demo_trade.log', encoding='utf-8'),
+        logging.FileHandler(log_file, encoding='utf-8'),
         logging.StreamHandler()
     ]
 )
@@ -225,7 +230,9 @@ class DemoTradeTester:
     def save_trade_history(self, filename: str = None):
         """保存交易历史"""
         if not filename:
-            filename = f"../logs/demo_trades_history_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+            log_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'logs')
+            os.makedirs(log_dir, exist_ok=True)
+            filename = os.path.join(log_dir, f"demo_trades_history_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json")
         
         try:
             # 转换datetime对象为字符串

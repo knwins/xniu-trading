@@ -21,7 +21,7 @@
 
 ### 依赖包
 ```bash
-pip install -r ../server/requirements.txt
+pip install -r ../requirements.txt
 ```
 
 ## 🔑 API配置
@@ -45,7 +45,7 @@ pip install -r ../server/requirements.txt
 ### 方法一：使用启动脚本（推荐）
 
 ```bash
-python start.py
+python start_trading.py
 ```
 
 启动后按提示操作：
@@ -130,7 +130,7 @@ python trader.py
 ### 日志记录
 - 交易日志：`logs/trading.log`
 - 交易历史：`trade_history_YYYYMMDD_HHMMSS.json`
-- 配置信息：`config/trading_config.json`
+- 配置信息：`small_trade_config.json`
 
 ## ⚠️ 重要提醒
 
