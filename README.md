@@ -92,6 +92,14 @@ sudo mkdir -p /opt/xniu-trading
 sudo chmod 755 /opt/xniu-trading
 ```
 
+#### 方法三：manage.sh生成问题
+如果部署后 `/opt/xniu-trading/manage.sh` 文件不存在：
+```bash
+# 运行测试脚本
+chmod +x test_manage.sh
+./test_manage.sh
+```
+
 ## 🖥️ 部署选项
 
 ### CentOS服务器部署（推荐）

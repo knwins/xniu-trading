@@ -246,6 +246,65 @@ sudo chown -R xniu:xniu /opt/xniu-trading
 sudo chmod -R 755 /opt/xniu-trading
 ```
 
+#### 1.4 manage.sh生成问题
+如果部署后 `/opt/xniu-trading/manage.sh` 文件不存在，请运行：
+```bash
+# 测试manage.sh生成
+chmod +x test_manage.sh
+./test_manage.sh
+```
+
+或者手动创建manage.sh：
+```bash
+# 创建项目目录（如果不存在）
+sudo mkdir -p /opt/xniu-trading
+
+# 创建manage.sh脚本
+sudo tee /opt/xniu-trading/manage.sh > /dev/null <<'EOF'
+#!/bin/bash
+PROJECT_DIR="/opt/xniu-trading"
+SERVICE_NAME="xniu-trading"
+
+case "$1" in
+    start)
+        echo "启动交易系统..."
+        systemctl start $SERVICE_NAME
+        ;;
+    stop)
+        echo "停止交易系统..."
+        systemctl stop $SERVICE_NAME
+        ;;
+    restart)
+        echo "重启交易系统..."
+        systemctl restart $SERVICE_NAME
+        ;;
+    status)
+        echo "查看服务状态..."
+        systemctl status $SERVICE_NAME
+        ;;
+    logs)
+        echo "查看服务日志..."
+        journalctl -u $SERVICE_NAME -f
+        ;;
+    config)
+        echo "编辑配置文件..."
+        vim $PROJECT_DIR/trader_config.json
+        ;;
+    backup)
+        echo "执行备份..."
+        $PROJECT_DIR/backup.sh
+        ;;
+    *)
+        echo "用法: $0 {start|stop|restart|status|logs|config|backup}"
+        exit 1
+        ;;
+esac
+EOF
+
+# 设置执行权限
+sudo chmod +x /opt/xniu-trading/manage.sh
+```
+
 ### 2. 性能优化
 
 #### 2.1 系统优化

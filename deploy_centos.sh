@@ -399,6 +399,7 @@ EOF
 create_management_script() {
     log_step "创建管理脚本..."
     
+    PROJECT_DIR="/opt/xniu-trading"
     MGMT_SCRIPT="$PROJECT_DIR/manage.sh"
     
     tee $MGMT_SCRIPT > /dev/null <<EOF
