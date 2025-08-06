@@ -1,0 +1,14 @@
+{
+  "api_key": "YOUR_API_KEY_HERE",
+  "secret_key": "YOUR_SECRET_KEY_HERE",
+  "symbol": "ETHUSDT",
+  "initial_balance": 100.0,
+  "max_position_size": 0.05,
+  "stop_loss_pct": 0.02,
+  "take_profit_pct": 0.05,
+  "max_daily_loss": 0.05,
+  "max_drawdown": 0.1,
+  "signal_cooldown": 600,
+  "base_url": "https://fapi.binance.com",
+  "testnet": false
+} 
