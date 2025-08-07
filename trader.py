@@ -1527,22 +1527,58 @@ class Trader:
                     time.sleep(60)  # 每分钟检查一次
                     
                 except KeyboardInterrupt:
-                    logger.info("收到停止信号")
+                    logger.info("🛑 收到停止信号")
+                    
+                    # 检查是否有持仓
+                    if self.current_position != 0:
+                        current_price = self.get_current_price()
+                        if current_price > 0:
+                            # 计算当前盈亏
+                            if self.current_position > 0:  # 多仓
+                                current_pnl = (current_price - self.entry_price) * self.position_size
+                                current_pnl_pct = ((current_price - self.entry_price) / self.entry_price * 100)
+                            else:  # 空仓
+                                current_pnl = (self.entry_price - current_price) * self.position_size
+                                current_pnl_pct = ((self.entry_price - current_price) / self.entry_price * 100)
+                            
+                            logger.info(f"📊 当前持仓状态:")
+                            logger.info(f"   仓位方向: {'多仓' if self.current_position > 0 else '空仓'}")
+                            logger.info(f"   仓位大小: {self.position_size:.6f} SOL")
+                            logger.info(f"   开仓价格: {self.entry_price:.2f} USDT")
+                            logger.info(f"   当前价格: {current_price:.2f} USDT")
+                            logger.info(f"   当前盈亏: {current_pnl:.2f} USDT ({current_pnl_pct:.2f}%)")
+                            
+                            # 询问用户是否平仓
+                            while True:
+                                try:
+                                    choice = input("\n❓ 是否要平仓？(y/n): ").strip().lower()
+                                    if choice in ['y', 'yes', '是', 'Y']:
+                                        logger.info("✅ 用户选择平仓")
+                                        self.close_position()
+                                        break
+                                    elif choice in ['n', 'no', '否', 'N']:
+                                        logger.info("⏸️ 用户选择不平仓，保持持仓")
+                                        break
+                                    else:
+                                        print("请输入 y/n 或 是/否")
+                                except (EOFError, KeyboardInterrupt):
+                                    logger.info("⏸️ 用户取消操作，保持持仓")
+                                    break
+                        else:
+                            logger.warning("无法获取当前价格，跳过平仓询问")
+                    else:
+                        logger.info("当前无持仓，无需平仓")
+                    
                     break
                 except Exception as e:
                     logger.error(f"运行异常: {e}")
                     time.sleep(10)  # 异常后等待10秒再继续
         
         finally:
-            # 关闭所有持仓
-            if self.current_position != 0:
-                logger.info("关闭剩余持仓")
-                self.close_position()
-            
             # 保存最终交易历史
             self.save_trade_history()
             
-            logger.info("实盘交易系统已停止")
+            logger.info("🏁 实盘交易系统已停止")
             self.running = False
     
     def save_trade_history(self, filename: str = None):
