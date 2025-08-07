@@ -192,7 +192,7 @@ Type=simple
 User=root
 WorkingDirectory=$PROJECT_DIR
 Environment=PATH=$PROJECT_DIR/venv/bin
-ExecStart=$PROJECT_DIR/venv/bin/python start_trading.py
+ExecStart=$PROJECT_DIR/venv/bin/python start_trading.py --service
 Restart=always
 RestartSec=10
 StandardOutput=journal
@@ -216,7 +216,7 @@ Type=simple
 User=$USER
 WorkingDirectory=$PROJECT_DIR
 Environment=PATH=$PROJECT_DIR/venv/bin
-ExecStart=$PROJECT_DIR/venv/bin/python start_trading.py
+ExecStart=$PROJECT_DIR/venv/bin/python start_trading.py --service
 Restart=always
 RestartSec=10
 StandardOutput=journal
@@ -395,6 +395,39 @@ EOF
     log_info "备份脚本创建完成"
 }
 
+# 创建配置文件
+create_config_file() {
+    log_step "创建配置文件..."
+    
+    CONFIG_FILE="$PROJECT_DIR/trader_config.json"
+    TEMPLATE_FILE="trader_config_template.json"
+    
+    if [[ -f "$TEMPLATE_FILE" ]]; then
+        cp "$TEMPLATE_FILE" "$CONFIG_FILE"
+        log_info "配置文件已创建: $CONFIG_FILE"
+        log_warn "请编辑配置文件并填入您的API密钥"
+    else
+        # 创建默认配置文件
+        tee $CONFIG_FILE > /dev/null <<EOF
+{
+  "api_key": "your-binance-api-key-here",
+  "secret_key": "your-binance-secret-key-here",
+  "symbol": "ETHUSDT",
+  "initial_balance": 1000.0,
+  "max_position_size": 0.1,
+  "stop_loss_pct": 0.05,
+  "take_profit_pct": 0.1,
+  "max_daily_loss": 0.1,
+  "max_drawdown": 0.2,
+  "signal_cooldown": 300,
+  "base_url": "https://fapi.binance.com"
+}
+EOF
+        log_info "默认配置文件已创建: $CONFIG_FILE"
+        log_warn "请编辑配置文件并填入您的API密钥"
+    fi
+}
+
 # 创建管理脚本
 create_management_script() {
     log_step "创建管理脚本..."
@@ -434,12 +467,18 @@ case "\$1" in
         echo "编辑配置文件..."
         vim \$PROJECT_DIR/trader_config.json
         ;;
+    validate)
+        echo "验证API配置..."
+        cd \$PROJECT_DIR
+        source venv/bin/activate
+        python start_trading.py --service --validate
+        ;;
     backup)
         echo "执行备份..."
         \$PROJECT_DIR/backup.sh
         ;;
     *)
-        echo "用法: \$0 {start|stop|restart|status|logs|config|backup}"
+        echo "用法: \$0 {start|stop|restart|status|logs|config|validate|backup}"
         exit 1
         ;;
 esac
@@ -470,6 +509,7 @@ show_deployment_info() {
     echo "  查看状态: $PROJECT_DIR/manage.sh status"
     echo "  查看日志: $PROJECT_DIR/manage.sh logs"
     echo "  编辑配置: $PROJECT_DIR/manage.sh config"
+    echo "  验证配置: $PROJECT_DIR/manage.sh validate"
     echo "  执行备份: $PROJECT_DIR/manage.sh backup"
     echo ""
     echo -e "${YELLOW}下一步操作:${NC}"
@@ -503,6 +543,7 @@ main() {
     setup_firewall
     create_monitor_script
     create_backup_script
+    create_config_file
     create_management_script
     show_deployment_info
 }

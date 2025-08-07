@@ -76,6 +76,11 @@ class Trader:
         self.stop_loss_pct = config.get('stop_loss_pct', 0.05)  # 止损比例
         self.take_profit_pct = config.get('take_profit_pct', 0.1)  # 止盈比例
         
+        # 精度设置 - 动态获取
+        self.quantity_precision = None  # 将在API连接后动态设置
+        self.price_precision = None     # 将在API连接后动态设置
+        self.min_quantity = None        # 将在API连接后动态设置
+        
         # 初始化组件
         self.data_loader = DataLoader()
         self.feature_engineer = FeatureEngineer()
@@ -93,6 +98,10 @@ class Trader:
         # 风险控制
         self.max_daily_loss = config.get('max_daily_loss', 0.1)  # 最大日亏损
         self.max_drawdown = config.get('max_drawdown', 0.2)  # 最大回撤
+        
+        # 信号冷却时间
+        self.signal_cooldown = config.get('signal_cooldown', 300)  # 信号冷却时间（秒）
+        self.last_signal_time = None  # 上次信号时间
         self.daily_pnl = 0
         self.peak_balance = self.initial_balance
         
@@ -100,17 +109,253 @@ class Trader:
         self.trade_history = []
         self.signal_history = []
         
-        # 运行状态
-        self.is_running = False
-        self.last_signal_time = None
-        self.signal_cooldown = config.get('signal_cooldown', 300)  # 信号冷却时间（秒）
+        # 线程控制
+        self.running = False  # 运行状态
+        self._sync_counter = 0  # 同步计数器
+        self.stop_event = threading.Event()
         
         # 初始化API连接
         if not self.test_api_connection():
             logger.error("API连接测试失败")
             raise Exception("无法连接到币安API")
         
+        # 动态设置精度
+        logger.info("正在获取交易对精度信息...")
+        self.quantity_precision = self._get_quantity_precision()
+        self.price_precision = self._get_price_precision()
+        self.min_quantity = self._get_min_quantity()
+        
+        logger.info(f"精度设置完成 - 数量精度: {self.quantity_precision}, 价格精度: {self.price_precision}, 最小数量: {self.min_quantity}")
         logger.info("实盘交易系统初始化完成")
+    
+    def _get_quantity_precision(self) -> int:
+        """获取数量精度 - 通过读取Binance交易对信息动态设置"""
+        try:
+            # 获取交易对信息
+            endpoint = '/fapi/v1/exchangeInfo'
+            response = self._make_request('GET', endpoint)
+            
+            if response and 'symbols' in response:
+                for symbol_info in response['symbols']:
+                    if symbol_info['symbol'] == self.symbol:
+                        # 找到对应的交易对
+                        for filter_info in symbol_info['filters']:
+                            if filter_info['filterType'] == 'LOT_SIZE':
+                                # 获取最小数量
+                                min_qty = float(filter_info['minQty'])
+                                step_size = float(filter_info['stepSize'])
+                                
+                                # 根据stepSize计算精度
+                                precision = self._calculate_precision_from_step_size(step_size)
+                                logger.info(f"动态设置 {self.symbol} 数量精度: {precision} (stepSize: {step_size})")
+                                return precision
+                        
+                        # 如果没找到LOT_SIZE过滤器，使用默认值
+                        logger.warning(f"未找到 {self.symbol} 的LOT_SIZE过滤器，使用默认精度")
+                        return 3
+                
+                logger.warning(f"未找到交易对 {self.symbol} 的信息，使用默认精度")
+                return 3
+            else:
+                logger.warning("无法获取交易对信息，使用默认精度")
+                return 3
+                
+        except Exception as e:
+            logger.error(f"获取数量精度异常: {e}，使用默认精度")
+            return 3
+    
+    def _get_price_precision(self) -> int:
+        """获取价格精度 - 通过读取Binance交易对信息动态设置"""
+        try:
+            # 获取交易对信息
+            endpoint = '/fapi/v1/exchangeInfo'
+            response = self._make_request('GET', endpoint)
+            
+            if response and 'symbols' in response:
+                for symbol_info in response['symbols']:
+                    if symbol_info['symbol'] == self.symbol:
+                        # 找到对应的交易对
+                        for filter_info in symbol_info['filters']:
+                            if filter_info['filterType'] == 'PRICE_FILTER':
+                                # 获取价格精度
+                                tick_size = float(filter_info['tickSize'])
+                                precision = self._calculate_precision_from_step_size(tick_size)
+                                logger.info(f"动态设置 {self.symbol} 价格精度: {precision} (tickSize: {tick_size})")
+                                return precision
+                        
+                        # 如果没找到PRICE_FILTER过滤器，使用默认值
+                        logger.warning(f"未找到 {self.symbol} 的PRICE_FILTER过滤器，使用默认精度")
+                        return 2
+                
+                logger.warning(f"未找到交易对 {self.symbol} 的信息，使用默认精度")
+                return 2
+            else:
+                logger.warning("无法获取交易对信息，使用默认精度")
+                return 2
+                
+        except Exception as e:
+            logger.error(f"获取价格精度异常: {e}，使用默认精度")
+            return 2
+    
+    def _calculate_precision_from_step_size(self, step_size: float) -> int:
+        """根据stepSize计算精度位数"""
+        if step_size <= 0:
+            return 0
+        
+        # 处理科学计数法
+        if 'e' in str(step_size).lower():
+            # 科学计数法，如1e-05
+            step_str = str(step_size).lower()
+            if 'e-' in step_str:
+                # 提取指数部分
+                exponent = int(step_str.split('e-')[1])
+                return exponent
+            else:
+                return 0
+        
+        # 将stepSize转换为字符串，计算小数位数
+        step_str = str(step_size)
+        if '.' in step_str:
+            # 去掉末尾的0
+            step_str = step_str.rstrip('0')
+            precision = len(step_str.split('.')[1])
+        else:
+            precision = 0
+        
+        return precision
+    
+    def _get_min_quantity(self) -> float:
+        """获取最小交易数量 - 通过读取Binance交易对信息动态设置"""
+        try:
+            # 获取交易对信息
+            endpoint = '/fapi/v1/exchangeInfo'
+            response = self._make_request('GET', endpoint)
+            
+            if response and 'symbols' in response:
+                for symbol_info in response['symbols']:
+                    if symbol_info['symbol'] == self.symbol:
+                        # 找到对应的交易对
+                        for filter_info in symbol_info['filters']:
+                            if filter_info['filterType'] == 'LOT_SIZE':
+                                # 获取最小数量
+                                min_qty = float(filter_info['minQty'])
+                                logger.info(f"动态设置 {self.symbol} 最小数量: {min_qty}")
+                                return min_qty
+                        
+                        # 如果没找到LOT_SIZE过滤器，使用默认值
+                        logger.warning(f"未找到 {self.symbol} 的LOT_SIZE过滤器，使用默认最小数量")
+                        return 0.001
+                
+                logger.warning(f"未找到交易对 {self.symbol} 的信息，使用默认最小数量")
+                return 0.001
+            else:
+                logger.warning("无法获取交易对信息，使用默认最小数量")
+                return 0.001
+                
+        except Exception as e:
+            logger.error(f"获取最小数量异常: {e}，使用默认最小数量")
+            return 0.001
+    
+    def _round_quantity(self, quantity: float) -> float:
+        """舍入数量到指定精度"""
+        if quantity <= 0:
+            return 0.0
+        
+        # 确保精度已设置
+        if self.quantity_precision is None:
+            self.quantity_precision = self._get_quantity_precision()
+        
+        # 使用Decimal进行精确舍入
+        decimal_quantity = Decimal(str(quantity))
+        
+        # 根据精度创建舍入格式
+        if self.quantity_precision == 0:
+            rounding_format = Decimal('1')
+        elif self.quantity_precision == 1:
+            rounding_format = Decimal('0.1')
+        elif self.quantity_precision == 2:
+            rounding_format = Decimal('0.01')
+        elif self.quantity_precision == 3:
+            rounding_format = Decimal('0.001')
+        elif self.quantity_precision == 4:
+            rounding_format = Decimal('0.0001')
+        elif self.quantity_precision == 5:
+            rounding_format = Decimal('0.00001')
+        else:
+            rounding_format = Decimal('0.001')  # 默认3位小数
+        
+        rounded_quantity = decimal_quantity.quantize(rounding_format, rounding=ROUND_DOWN)
+        
+        # 确保数量不为0
+        if rounded_quantity <= 0:
+            return 0.0
+            
+        return float(rounded_quantity)
+    
+    def _round_price(self, price: float) -> float:
+        """舍入价格到指定精度"""
+        if price <= 0:
+            return 0.0
+        
+        # 确保精度已设置
+        if self.price_precision is None:
+            self.price_precision = self._get_price_precision()
+        
+        # 使用Decimal进行精确舍入
+        decimal_price = Decimal(str(price))
+        
+        # 根据精度创建舍入格式
+        if self.price_precision == 0:
+            rounding_format = Decimal('1')
+        elif self.price_precision == 1:
+            rounding_format = Decimal('0.1')
+        elif self.price_precision == 2:
+            rounding_format = Decimal('0.01')
+        elif self.price_precision == 3:
+            rounding_format = Decimal('0.001')
+        elif self.price_precision == 4:
+            rounding_format = Decimal('0.0001')
+        elif self.price_precision == 5:
+            rounding_format = Decimal('0.00001')
+        else:
+            rounding_format = Decimal('0.01')  # 默认2位小数
+        
+        rounded_price = decimal_price.quantize(rounding_format, rounding=ROUND_DOWN)
+        
+        return float(rounded_price)
+    
+    def _validate_quantity(self, quantity: float) -> bool:
+        """验证数量是否符合交易所要求"""
+        if quantity <= 0:
+            return False
+        
+        # 使用已缓存的最小数量
+        if self.min_quantity is None:
+            self.min_quantity = self._get_min_quantity()
+        
+        if quantity < self.min_quantity:
+            logger.warning(f"数量 {quantity} 小于最小数量 {self.min_quantity}")
+            return False
+        
+        return True
+    
+    def _get_server_time(self) -> int:
+        """获取服务器时间戳"""
+        try:
+            url = f"{self.base_url}/fapi/v1/time"
+            response = requests.get(url, timeout=10)
+            
+            if response.status_code == 200:
+                data = response.json()
+                if 'serverTime' in data:
+                    return data['serverTime']
+            
+            # 如果获取服务器时间失败，使用本地时间
+            logger.warning("获取服务器时间失败，使用本地时间")
+            return int(time.time() * 1000)
+        except Exception as e:
+            logger.warning(f"获取服务器时间异常: {e}，使用本地时间")
+            return int(time.time() * 1000)
     
     def _generate_signature(self, params: Dict) -> str:
         """生成API签名"""
@@ -133,7 +378,9 @@ class Trader:
             params = {}
         
         if signed:
-            params['timestamp'] = int(time.time() * 1000)
+            # 使用服务器时间戳避免时间同步问题
+            server_time = self._get_server_time()
+            params['timestamp'] = server_time
             params['signature'] = self._generate_signature(params)
         
         try:
@@ -236,7 +483,15 @@ class Trader:
                 if account_info:
                     print("✅ API密钥验证成功")
                     logger.info("API连接和密钥验证成功")
-                    return True
+                    
+                    # 3. 检查持仓模式
+                    print("🔍 检查持仓模式...")
+                    if self.check_and_fix_position_mode():
+                        print("✅ 持仓模式检查通过")
+                        return True
+                    else:
+                        print("❌ 持仓模式检查失败")
+                        return False
                 else:
                     print("❌ API密钥验证失败")
                     logger.error("API密钥验证失败")
@@ -271,13 +526,247 @@ class Trader:
             response = self._make_request('GET', endpoint, params)
             
             if response and 'price' in response:
-                return float(response['price'])
+                price = float(response['price'])
+                # 应用价格精度处理
+                return self._round_price(price)
             else:
                 logger.error("获取当前价格失败")
                 return 0.0
         except Exception as e:
             logger.error(f"获取当前价格异常: {e}")
             return 0.0
+    
+    def get_position_info(self) -> Dict:
+        """获取当前持仓信息"""
+        try:
+            endpoint = '/fapi/v2/positionRisk'
+            params = {'symbol': self.symbol}
+            response = self._make_request('GET', endpoint, params, signed=True)
+            
+            if response and isinstance(response, list):
+                for position in response:
+                    if position['symbol'] == self.symbol:
+                        return {
+                            'size': float(position['positionAmt']),
+                            'entry_price': float(position['entryPrice']),
+                            'unrealized_pnl': float(position['unRealizedProfit']),
+                            'side': 'LONG' if float(position['positionAmt']) > 0 else 'SHORT' if float(position['positionAmt']) < 0 else 'NONE'
+                        }
+            
+            return {'size': 0, 'entry_price': 0, 'unrealized_pnl': 0, 'side': 'NONE'}
+        except Exception as e:
+            logger.error(f"获取持仓信息异常: {e}")
+            return {'size': 0, 'entry_price': 0, 'unrealized_pnl': 0, 'side': 'NONE'}
+    
+    def get_position_mode(self) -> str:
+        """获取当前持仓模式"""
+        try:
+            endpoint = '/fapi/v1/positionSide/dual'
+            response = self._make_request('GET', endpoint, params={}, signed=True)
+            
+            if response and 'dualSidePosition' in response:
+                return 'HEDGE' if response['dualSidePosition'] else 'ONE_WAY'
+            else:
+                logger.warning("无法获取持仓模式信息，默认使用单向模式")
+                return 'ONE_WAY'
+        except Exception as e:
+            logger.error(f"获取持仓模式异常: {e}")
+            return 'ONE_WAY'
+    
+    def set_position_mode(self, mode: str) -> bool:
+        """设置持仓模式"""
+        try:
+            endpoint = '/fapi/v1/positionSide/dual'
+            params = {'dualSidePosition': mode == 'HEDGE'}
+            response = self._make_request('POST', endpoint, params, signed=True)
+            
+            if response and response.get('code') == 200:
+                logger.info(f"持仓模式设置成功: {mode}")
+                return True
+            else:
+                logger.error(f"持仓模式设置失败: {response}")
+                return False
+        except Exception as e:
+            logger.error(f"设置持仓模式异常: {e}")
+            return False
+    
+    def check_and_fix_position_mode(self) -> bool:
+        """检查并修复持仓模式"""
+        try:
+            current_mode = self.get_position_mode()
+            logger.info(f"当前持仓模式: {current_mode}")
+            
+            if current_mode == 'HEDGE':
+                print("\n⚠️  检测到对冲模式 (Hedge Mode)")
+                print("本交易系统仅支持单向持仓模式 (One-way Mode)")
+                print("对冲模式可能导致持仓冲突和交易错误")
+                
+                # 获取所有持仓信息
+                all_positions = self.get_all_positions()
+                if all_positions:
+                    print("\n📊 当前持仓情况:")
+                    for pos in all_positions:
+                        if abs(float(pos['positionAmt'])) > 0:
+                            side = "多仓" if float(pos['positionAmt']) > 0 else "空仓"
+                            print(f"   {pos['symbol']}: {side} {abs(float(pos['positionAmt']))}")
+                
+                # 询问用户是否修改为单向模式
+                while True:
+                    confirm = input("\n是否修改为单向模式并平仓所有持仓? (y/N): ").strip().lower()
+                    if confirm in ['y', 'yes', '是']:
+                        print("🔄 正在修改为单向模式...")
+                        
+                        # 1. 平仓所有持仓
+                        print("📊 正在平仓所有持仓...")
+                        if self.close_all_positions():
+                            print("✅ 所有持仓已平仓")
+                        else:
+                            print("⚠️  部分持仓平仓失败")
+                            print("请检查以下可能的原因:")
+                            print("1. 持仓数量过小，低于最小交易数量")
+                            print("2. 账户余额不足")
+                            print("3. 网络连接问题")
+                            print("4. API权限不足")
+                            
+                            retry = input("\n是否继续修改持仓模式? (y/N): ").strip().lower()
+                            if retry not in ['y', 'yes', '是']:
+                                print("❌ 用户取消操作，交易系统将退出")
+                                return False
+                        
+                        # 2. 修改为单向模式
+                        print("🔄 正在修改持仓模式...")
+                        if self.set_position_mode('ONE_WAY'):
+                            print("✅ 已成功修改为单向模式")
+                            logger.info("持仓模式已修改为单向模式")
+                            return True
+                        else:
+                            print("❌ 修改持仓模式失败")
+                            print("\n📋 手动修改步骤:")
+                            print("1. 登录Binance合约交易界面")
+                            print("2. 进入'设置' -> '合约设置'")
+                            print("3. 将'持仓模式'从'双向持仓'改为'单向持仓'")
+                            print("4. 确认修改")
+                            print("\n⚠️  注意: 修改持仓模式前必须先平仓所有持仓")
+                            return False
+                    elif confirm in ['n', 'no', '否', '']:
+                        print("❌ 用户取消操作，交易系统将退出")
+                        logger.warning("用户拒绝修改持仓模式，系统退出")
+                        return False
+                    else:
+                        print("请输入 y 或 n")
+            else:
+                logger.info("持仓模式检查通过，使用单向模式")
+                return True
+                
+        except Exception as e:
+            logger.error(f"检查持仓模式异常: {e}")
+            return False
+    
+    def get_all_positions(self) -> List[Dict]:
+        """获取所有持仓信息"""
+        try:
+            endpoint = '/fapi/v2/positionRisk'
+            response = self._make_request('GET', endpoint, params={}, signed=True)
+            
+            if response and isinstance(response, list):
+                return response
+            else:
+                return []
+        except Exception as e:
+            logger.error(f"获取所有持仓信息异常: {e}")
+            return []
+    
+    def close_all_positions(self) -> bool:
+        """平仓所有持仓"""
+        try:
+            positions = self.get_all_positions()
+            success_count = 0
+            total_positions = 0
+            
+            for position in positions:
+                symbol = position['symbol']
+                position_amt = float(position['positionAmt'])
+                
+                if abs(position_amt) > 0:
+                    total_positions += 1
+                    # 确定平仓方向
+                    side = 'SELL' if position_amt > 0 else 'BUY'
+                    
+                    # 使用精度处理后的数量
+                    rounded_quantity = self._round_quantity(abs(position_amt))
+                    
+                    # 验证数量
+                    if not self._validate_quantity(rounded_quantity):
+                        logger.error(f"平仓数量 {rounded_quantity} 不符合交易所要求: {symbol}")
+                        continue
+                    
+                    # 平仓 - 根据持仓模式决定是否指定持仓方向
+                    params = {
+                        'symbol': symbol,
+                        'side': side,
+                        'type': 'MARKET',
+                        'quantity': rounded_quantity
+                    }
+                    
+                    # 如果是对冲模式，添加持仓方向参数
+                    current_mode = self.get_position_mode()
+                    if current_mode == 'HEDGE':
+                        params['positionSide'] = 'LONG' if position_amt > 0 else 'SHORT'
+                    
+                    response = self._make_request('POST', '/fapi/v1/order', params, signed=True)
+                    
+                    if response and 'orderId' in response:
+                        logger.info(f"平仓成功: {symbol} {side} {rounded_quantity}")
+                        success_count += 1
+                    else:
+                        logger.error(f"平仓失败: {symbol} {response}")
+                        # 尝试获取更详细的错误信息
+                        if response and 'msg' in response:
+                            logger.error(f"错误信息: {response['msg']}")
+            
+            # 如果没有持仓需要平仓，返回成功
+            if total_positions == 0:
+                logger.info("没有需要平仓的持仓")
+                return True
+            
+            # 如果所有持仓都平仓成功，返回成功
+            if success_count == total_positions:
+                logger.info(f"所有持仓平仓成功: {success_count}/{total_positions}")
+                return True
+            else:
+                logger.warning(f"部分持仓平仓失败: {success_count}/{total_positions}")
+                return False
+                
+        except Exception as e:
+            logger.error(f"平仓所有持仓异常: {e}")
+            return False
+    
+    def sync_position_state(self):
+        """同步持仓状态"""
+        try:
+            position_info = self.get_position_info()
+            
+            if position_info['side'] == 'NONE':
+                # 没有持仓
+                self.current_position = 0
+                self.position_size = 0
+                self.entry_price = 0
+                logger.info("同步持仓状态: 无持仓")
+            elif position_info['side'] == 'LONG':
+                # 多仓
+                self.current_position = 1
+                self.position_size = abs(position_info['size'])
+                self.entry_price = position_info['entry_price']
+                logger.info(f"同步持仓状态: 多仓 {self.position_size} @ {self.entry_price}")
+            elif position_info['side'] == 'SHORT':
+                # 空仓
+                self.current_position = -1
+                self.position_size = abs(position_info['size'])
+                self.entry_price = position_info['entry_price']
+                logger.info(f"同步持仓状态: 空仓 {self.position_size} @ {self.entry_price}")
+                
+        except Exception as e:
+            logger.error(f"同步持仓状态异常: {e}")
     
     def get_klines(self, interval: str = '1h', limit: int = 100) -> pd.DataFrame:
         """获取K线数据"""
@@ -323,23 +812,40 @@ class Trader:
             position_value *= 1.2  # 强信号，增加仓位
         
         quantity = position_value / price
+        
+        # 应用精度处理
+        quantity = self._round_quantity(quantity)
+        
+        # 验证数量
+        if not self._validate_quantity(quantity):
+            logger.warning(f"计算出的数量 {quantity} 不符合交易所要求")
+            return 0.0
+        
         return quantity
     
     def place_order(self, side: str, quantity: float, order_type: str = 'MARKET') -> Dict:
         """下单"""
         try:
+            # 应用精度处理
+            rounded_quantity = self._round_quantity(quantity)
+            
+            # 验证数量
+            if not self._validate_quantity(rounded_quantity):
+                logger.error(f"数量 {rounded_quantity} 不符合交易所要求，取消下单")
+                return None
+            
             endpoint = '/fapi/v1/order'
             params = {
                 'symbol': self.symbol,
                 'side': side,
                 'type': order_type,
-                'quantity': quantity
+                'quantity': rounded_quantity
             }
             
             response = self._make_request('POST', endpoint, params, signed=True)
             
             if response and 'orderId' in response:
-                logger.info(f"下单成功: {side} {quantity} {self.symbol}")
+                logger.info(f"下单成功: {side} {rounded_quantity} {self.symbol}")
                 return response
             else:
                 logger.error(f"下单失败: {response}")
@@ -393,6 +899,10 @@ class Trader:
                     self.position_size = 0
                     self.entry_price = 0
                     
+                    # 同步持仓状态
+                    time.sleep(1)  # 等待订单执行
+                    self.sync_position_state()
+                    
                     return True
             
             return False
@@ -442,6 +952,11 @@ class Trader:
                 self.trade_history.append(trade_record)
                 
                 logger.info(f"开仓成功: {side} {quantity} {self.symbol} @ {current_price}")
+                
+                # 同步持仓状态
+                time.sleep(1)  # 等待订单执行
+                self.sync_position_state()
+                
                 return True
             
             return False
@@ -545,18 +1060,31 @@ class Trader:
     def run(self):
         """运行交易系统"""
         logger.info("启动实盘交易系统...")
-        self.is_running = True
+        self.running = True
         
         # 重置日统计
         self.reset_daily_stats()
         
+        # 同步初始持仓状态
+        logger.info("同步初始持仓状态...")
+        self.sync_position_state()
+        
         try:
-            while self.is_running:
+            while self.running:
                 try:
                     # 检查风险限制
                     if not self.check_risk_limits():
                         logger.warning("触发风险限制，停止交易")
                         break
+                    
+                    # 定期同步持仓状态（每10次循环同步一次）
+                    if hasattr(self, '_sync_counter'):
+                        self._sync_counter += 1
+                    else:
+                        self._sync_counter = 0
+                    
+                    if self._sync_counter % 10 == 0:
+                        self.sync_position_state()
                     
                     # 检查信号冷却时间
                     current_time = time.time()
@@ -576,7 +1104,10 @@ class Trader:
                         if ((signal > 0 and self.current_position < 0) or 
                             (signal < 0 and self.current_position > 0)):
                             logger.info("信号反转，平仓")
-                            self.close_position()
+                            if self.close_position():
+                                # 平仓成功后等待一段时间，确保订单完全执行
+                                logger.info("等待平仓订单执行...")
+                                time.sleep(3)  # 等待3秒
                         
                         # 如果没有持仓，开仓
                         if self.current_position == 0:
@@ -634,7 +1165,7 @@ class Trader:
             self.save_trade_history()
             
             logger.info("实盘交易系统已停止")
-            self.is_running = False
+            self.running = False
     
     def save_trade_history(self, filename: str = None):
         """保存交易历史"""

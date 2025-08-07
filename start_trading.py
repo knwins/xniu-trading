@@ -8,11 +8,13 @@
 - 启动实盘交易
 - 演示模式
 - 配置管理
+- 支持非交互式模式（用于系统服务）
 """
 
 import os
 import sys
 import json
+import argparse
 from datetime import datetime
 
 # 添加父目录到Python路径，以便导入根目录中的模块
@@ -279,9 +281,31 @@ def validate_api_credentials(config: dict) -> bool:
         print(f"❌ 验证过程异常: {e}")
         return False
 
+def run_trading_service(config: dict):
+    """运行交易服务（非交互式模式）"""
+    print("🚀 启动交易服务（非交互式模式）...")
+    print(f"📊 使用配置: {config.get('symbol', 'Unknown')}")
+    
+    try:
+        # 验证配置
+        if not validate_api_credentials(config):
+            print("❌ API凭据验证失败，服务启动失败")
+            return False
+        
+        # 启动交易器
+        trader = Trader(config)
+        trader.run()
+        return True
+        
+    except KeyboardInterrupt:
+        print("\n⏹️ 收到停止信号")
+        return True
+    except Exception as e:
+        print(f"\n❌ 服务运行异常: {e}")
+        return False
 
-def main():
-    """主函数"""
+def interactive_main():
+    """交互式主函数"""
     print_banner()
     
     while True:
@@ -348,11 +372,45 @@ def main():
         else:
             print("❌ 无效选择，请重新输入")
 
+def main():
+    """主函数"""
+    parser = argparse.ArgumentParser(description='XNIU.IO 实盘交易系统')
+    parser.add_argument('--service', action='store_true', help='以服务模式运行（非交互式）')
+    parser.add_argument('--config', type=str, help='指定配置文件路径')
+    parser.add_argument('--validate', action='store_true', help='仅验证API配置')
+    
+    args = parser.parse_args()
+    
+    if args.service:
+        # 服务模式运行
+        config_file = args.config or os.path.join(os.path.dirname(os.path.abspath(__file__)), "trader_config.json")
+        config = load_config(config_file)
+        
+        if not config:
+            print(f"❌ 配置文件不存在或无法加载: {config_file}")
+            sys.exit(1)
+        
+        if args.validate:
+            # 仅验证配置
+            if validate_api_credentials(config):
+                print("✅ API配置验证成功")
+                sys.exit(0)
+            else:
+                print("❌ API配置验证失败")
+                sys.exit(1)
+        else:
+            # 运行交易服务
+            success = run_trading_service(config)
+            sys.exit(0 if success else 1)
+    else:
+        # 交互式模式运行
+        try:
+            interactive_main()
+        except KeyboardInterrupt:
+            print("\n\n👋 程序已退出")
+        except Exception as e:
+            print(f"\n❌ 程序异常: {e}")
+            sys.exit(1)
+
 if __name__ == "__main__":
-    try:
-        main()
-    except KeyboardInterrupt:
-        print("\n\n👋 程序已退出")
-    except Exception as e:
-        print(f"\n❌ 程序异常: {e}")
-        sys.exit(1) 
+    main() 

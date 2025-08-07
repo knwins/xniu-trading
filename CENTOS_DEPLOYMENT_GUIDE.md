@@ -100,17 +100,26 @@ vim /opt/xniu-trading/trader_config.json
 
 ### 5. 启动服务
 
-#### 5.1 启动交易系统
+#### 5.1 验证配置
+```bash
+# 验证API配置
+/opt/xniu-trading/manage.sh validate
+
+# 或者运行测试脚本
+./test_service.sh
+```
+
+#### 5.2 启动交易系统
 ```bash
 /opt/xniu-trading/manage.sh start
 ```
 
-#### 5.2 查看服务状态
+#### 5.3 查看服务状态
 ```bash
 /opt/xniu-trading/manage.sh status
 ```
 
-#### 5.3 设置开机自启
+#### 5.4 设置开机自启
 ```bash
 sudo systemctl enable xniu-trading
 ```
@@ -139,6 +148,9 @@ sudo systemctl enable xniu-trading
 ```bash
 # 编辑配置
 /opt/xniu-trading/manage.sh config
+
+# 验证配置
+/opt/xniu-trading/manage.sh validate
 
 # 执行备份
 /opt/xniu-trading/manage.sh backup
@@ -252,6 +264,20 @@ sudo chmod -R 755 /opt/xniu-trading
 # 测试manage.sh生成
 chmod +x test_manage.sh
 ./test_manage.sh
+```
+
+#### 1.5 服务启动问题
+如果服务无法自动启动，请检查：
+```bash
+# 运行服务测试脚本
+chmod +x test_service.sh
+./test_service.sh
+
+# 检查服务配置
+sudo systemctl status xniu-trading
+
+# 查看详细日志
+sudo journalctl -u xniu-trading -n 50
 ```
 
 或者手动创建manage.sh：
