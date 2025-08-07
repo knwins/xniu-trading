@@ -231,8 +231,13 @@ class Trader:
         
         return precision
     
-    def _get_min_quantity(self) -> float:
-        """获取最小交易数量 - 通过读取Binance交易对信息动态设置"""
+    def _get_trading_limits(self) -> Dict:
+        """
+        获取交易对的限制信息
+        
+        Returns:
+            包含各种限制信息的字典
+        """
         try:
             # 获取交易对信息
             endpoint = '/fapi/v1/exchangeInfo'
@@ -241,24 +246,71 @@ class Trader:
             if response and 'symbols' in response:
                 for symbol_info in response['symbols']:
                     if symbol_info['symbol'] == self.symbol:
-                        # 找到对应的交易对
+                        limits = {
+                            'min_qty': 0.001,      # 最小数量
+                            'max_qty': 1000000,    # 最大数量
+                            'min_price': 0.0,      # 最小价格
+                            'max_price': 1000000,  # 最大价格
+                            'min_notional': 5.0,   # 最小名义价值
+                            'step_size': 0.001,    # 数量步长
+                            'tick_size': 0.01      # 价格步长
+                        }
+                        
+                        # 解析各种过滤器
                         for filter_info in symbol_info['filters']:
                             if filter_info['filterType'] == 'LOT_SIZE':
-                                # 获取最小数量
-                                min_qty = float(filter_info['minQty'])
-                                logger.info(f"动态设置 {self.symbol} 最小数量: {min_qty}")
-                                return min_qty
+                                limits['min_qty'] = float(filter_info['minQty'])
+                                limits['max_qty'] = float(filter_info['maxQty'])
+                                limits['step_size'] = float(filter_info['stepSize'])
+                            elif filter_info['filterType'] == 'PRICE_FILTER':
+                                limits['min_price'] = float(filter_info['minPrice'])
+                                limits['max_price'] = float(filter_info['maxPrice'])
+                                limits['tick_size'] = float(filter_info['tickSize'])
+                            elif filter_info['filterType'] == 'MIN_NOTIONAL':
+                                limits['min_notional'] = float(filter_info['notional'])
                         
-                        # 如果没找到LOT_SIZE过滤器，使用默认值
-                        logger.warning(f"未找到 {self.symbol} 的LOT_SIZE过滤器，使用默认最小数量")
-                        return 0.001
+                        logger.info(f"动态设置 {self.symbol} 交易限制: {limits}")
+                        return limits
                 
-                logger.warning(f"未找到交易对 {self.symbol} 的信息，使用默认最小数量")
-                return 0.001
+                logger.warning(f"未找到交易对 {self.symbol} 的信息，使用默认限制")
+                return {
+                    'min_qty': 0.001,
+                    'max_qty': 1000000,
+                    'min_price': 0.0,
+                    'max_price': 1000000,
+                    'min_notional': 5.0,
+                    'step_size': 0.001,
+                    'tick_size': 0.01
+                }
             else:
-                logger.warning("无法获取交易对信息，使用默认最小数量")
-                return 0.001
+                logger.warning("无法获取交易对信息，使用默认限制")
+                return {
+                    'min_qty': 0.001,
+                    'max_qty': 1000000,
+                    'min_price': 0.0,
+                    'max_price': 1000000,
+                    'min_notional': 5.0,
+                    'step_size': 0.001,
+                    'tick_size': 0.01
+                }
                 
+        except Exception as e:
+            logger.error(f"获取交易限制异常: {e}，使用默认限制")
+            return {
+                'min_qty': 0.001,
+                'max_qty': 1000000,
+                'min_price': 0.0,
+                'max_price': 1000000,
+                'min_notional': 5.0,
+                'step_size': 0.001,
+                'tick_size': 0.01
+            }
+    
+    def _get_min_quantity(self) -> float:
+        """获取最小交易数量 - 通过读取Binance交易对信息动态设置"""
+        try:
+            limits = self._get_trading_limits()
+            return limits['min_qty']
         except Exception as e:
             logger.error(f"获取最小数量异常: {e}，使用默认最小数量")
             return 0.001
@@ -387,12 +439,55 @@ class Trader:
         if quantity <= 0:
             return False
         
-        # 使用已缓存的最小数量
-        if self.min_quantity is None:
-            self.min_quantity = self._get_min_quantity()
+        # 获取交易限制
+        limits = self._get_trading_limits()
         
-        if quantity < self.min_quantity:
-            logger.warning(f"数量 {quantity} 小于最小数量 {self.min_quantity}")
+        # 检查最小数量
+        if quantity < limits['min_qty']:
+            logger.warning(f"数量 {quantity} 小于最小数量 {limits['min_qty']}")
+            return False
+        
+        # 检查最大数量
+        if quantity > limits['max_qty']:
+            logger.warning(f"数量 {quantity} 大于最大数量 {limits['max_qty']}")
+            return False
+        
+        return True
+    
+    def _validate_price(self, price: float) -> bool:
+        """验证价格是否符合交易所要求"""
+        if price <= 0:
+            return False
+        
+        # 获取交易限制
+        limits = self._get_trading_limits()
+        
+        # 检查最小价格
+        if price < limits['min_price']:
+            logger.warning(f"价格 {price} 小于最小价格 {limits['min_price']}")
+            return False
+        
+        # 检查最大价格
+        if price > limits['max_price']:
+            logger.warning(f"价格 {price} 大于最大价格 {limits['max_price']}")
+            return False
+        
+        return True
+    
+    def _validate_notional(self, quantity: float, price: float) -> bool:
+        """验证名义价值是否符合交易所要求"""
+        if quantity <= 0 or price <= 0:
+            return False
+        
+        # 计算名义价值
+        notional = quantity * price
+        
+        # 获取交易限制
+        limits = self._get_trading_limits()
+        
+        # 检查最小名义价值
+        if notional < limits['min_notional']:
+            logger.warning(f"名义价值 {notional:.2f} 小于最小名义价值 {limits['min_notional']}")
             return False
         
         return True
@@ -860,17 +955,20 @@ class Trader:
     
     def calculate_position_size(self, price: float, signal_strength: float) -> float:
         """
-        智能计算仓位大小，考虑精度要求
+        智能计算仓位大小，考虑精度要求和交易限制
         
         Args:
             price: 当前价格
             signal_strength: 信号强度 (0-1)
         
         Returns:
-            符合精度要求的仓位大小
+            符合精度要求和交易限制的仓位大小
         """
         if price <= 0:
             return 0.0
+        
+        # 获取交易限制
+        limits = self._get_trading_limits()
         
         # 计算可用资金
         available_balance = self.current_balance * self.max_position_size
@@ -888,14 +986,28 @@ class Trader:
         # 应用精度处理（向下舍入确保不超出资金）
         quantity = self._round_quantity(raw_quantity, 'DOWN')
         
-        # 验证数量
+        # 验证数量限制
         if not self._validate_quantity(quantity):
             logger.warning(f"计算出的数量 {quantity} 不符合交易所要求")
             
             # 尝试使用最小数量
-            if self.min_quantity and self.min_quantity <= raw_quantity:
-                logger.info(f"使用最小数量: {self.min_quantity}")
-                return self.min_quantity
+            if limits['min_qty'] <= raw_quantity:
+                logger.info(f"使用最小数量: {limits['min_qty']}")
+                quantity = limits['min_qty']
+            else:
+                return 0.0
+        
+        # 验证名义价值限制
+        if not self._validate_notional(quantity, price):
+            logger.warning(f"名义价值不符合交易所要求，尝试调整数量")
+            
+            # 计算满足最小名义价值所需的最小数量
+            min_quantity_for_notional = limits['min_notional'] / price
+            min_quantity_for_notional = self._round_quantity(min_quantity_for_notional, 'UP')
+            
+            if min_quantity_for_notional <= limits['max_qty']:
+                logger.info(f"调整为满足最小名义价值的数量: {min_quantity_for_notional}")
+                quantity = min_quantity_for_notional
             else:
                 return 0.0
         
@@ -953,10 +1065,23 @@ class Trader:
             # 应用精度处理
             rounded_quantity = self._round_quantity(quantity, rounding_mode)
             
-            # 验证数量
+            # 验证数量限制
             if not self._validate_quantity(rounded_quantity):
                 logger.error(f"数量 {rounded_quantity} 不符合交易所要求，取消下单")
                 return None
+            
+            # 如果是限价单，验证价格限制
+            if order_type == 'LIMIT' and price is not None:
+                if not self._validate_price(price):
+                    logger.error(f"价格 {price} 不符合交易所要求，取消下单")
+                    return None
+            
+            # 验证名义价值限制
+            current_price = price if price else self.get_current_price()
+            if current_price > 0:
+                if not self._validate_notional(rounded_quantity, current_price):
+                    logger.error(f"名义价值不符合交易所要求，取消下单")
+                    return None
             
             endpoint = '/fapi/v1/order'
             params = {
