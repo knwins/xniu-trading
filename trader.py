@@ -1096,15 +1096,31 @@ class Trader:
                 params['price'] = price  # 直接使用原始价格，不进行精度处理
                 params['timeInForce'] = 'GTC'  # Good Till Cancel
             
-            logger.info(f"下单参数: {side} {rounded_quantity} {self.symbol} @ {price if price else 'MARKET'}")
+            # 记录详细的交易信息
+            notional_value = rounded_quantity * current_price if current_price > 0 else 0
+            logger.info(f"📊 交易详情:")
+            logger.info(f"   交易方向: {side}")
+            logger.info(f"   订单类型: {order_type}")
+            logger.info(f"   原始数量: {quantity:.6f}")
+            logger.info(f"   精度处理后数量: {rounded_quantity}")
+            logger.info(f"   当前价格: {current_price:.2f} USDT")
+            logger.info(f"   名义价值: {notional_value:.2f} USDT")
+            logger.info(f"   账户余额: {self.current_balance:.2f} USDT")
+            logger.info(f"   仓位比例: {(notional_value/self.current_balance*100):.1f}%" if self.current_balance > 0 else "   仓位比例: N/A")
             
             response = self._make_request('POST', endpoint, params, signed=True)
             
             if response and 'orderId' in response:
-                logger.info(f"下单成功: {side} {rounded_quantity} {self.symbol}")
+                # 记录成功信息
+                logger.info(f"✅ 下单成功:")
+                logger.info(f"   订单ID: {response.get('orderId', 'N/A')}")
+                logger.info(f"   状态: {response.get('status', 'N/A')}")
+                logger.info(f"   成交价格: {response.get('avgPrice', 'N/A')} USDT")
+                logger.info(f"   成交数量: {response.get('executedQty', 'N/A')}")
+                logger.info(f"   手续费: {response.get('commission', 'N/A')} USDT")
                 return response
             else:
-                logger.error(f"下单失败: {response}")
+                logger.error(f"❌ 下单失败: {response}")
                 return None
         except Exception as e:
             logger.error(f"下单异常: {e}")
@@ -1117,6 +1133,14 @@ class Trader:
         
         try:
             side = 'SELL' if self.current_position > 0 else 'BUY'
+            
+            # 记录平仓前的状态
+            logger.info(f"🔄 平仓操作:")
+            logger.info(f"   当前仓位: {'多仓' if self.current_position > 0 else '空仓'}")
+            logger.info(f"   仓位大小: {self.position_size:.6f} SOL")
+            logger.info(f"   开仓价格: {self.entry_price:.2f} USDT")
+            logger.info(f"   平仓方向: {side}")
+            
             response = self.place_order(side, self.position_size)
             
             if response:
@@ -1125,8 +1149,10 @@ class Trader:
                 if current_price > 0:
                     if self.current_position > 0:  # 多仓
                         pnl = (current_price - self.entry_price) * self.position_size
+                        pnl_pct = ((current_price - self.entry_price) / self.entry_price * 100)
                     else:  # 空仓
                         pnl = (self.entry_price - current_price) * self.position_size
+                        pnl_pct = ((self.entry_price - current_price) / self.entry_price * 100)
                     
                     self.total_pnl += pnl
                     self.current_balance += pnl
@@ -1135,6 +1161,16 @@ class Trader:
                     self.trade_count += 1
                     if pnl > 0:
                         self.win_count += 1
+                    
+                    # 记录详细的平仓结果
+                    logger.info(f"📈 平仓结果:")
+                    logger.info(f"   平仓价格: {current_price:.2f} USDT")
+                    logger.info(f"   盈亏金额: {pnl:.2f} USDT")
+                    logger.info(f"   盈亏比例: {pnl_pct:.2f}%")
+                    logger.info(f"   总盈亏: {self.total_pnl:.2f} USDT")
+                    logger.info(f"   账户余额: {self.current_balance:.2f} USDT")
+                    logger.info(f"   交易次数: {self.trade_count}")
+                    logger.info(f"   胜率: {(self.win_count/self.trade_count*100):.1f}%" if self.trade_count > 0 else "   胜率: N/A")
                     
                     # 记录交易
                     trade_record = {
@@ -1193,7 +1229,17 @@ class Trader:
                     logger.warning("仓位大小计算为0，跳过开仓")
                     return False
                 
-                logger.info(f"买入开仓: 数量={quantity} SOL, 价格={current_price} (价格不做精度处理)")
+                # 计算交易详情
+                notional_value = quantity * current_price
+                position_ratio = (notional_value / self.current_balance * 100) if self.current_balance > 0 else 0
+                
+                logger.info(f"🟢 买入开仓详情:")
+                logger.info(f"   信号强度: {signal_strength:.2f}")
+                logger.info(f"   计算数量: {quantity:.6f} SOL")
+                logger.info(f"   当前价格: {current_price:.2f} USDT")
+                logger.info(f"   名义价值: {notional_value:.2f} USDT")
+                logger.info(f"   仓位比例: {position_ratio:.1f}%")
+                logger.info(f"   账户余额: {self.current_balance:.2f} USDT")
                 
             else:  # SELL
                 # 卖出：计算卖出金额并进行精度处理
@@ -1206,7 +1252,13 @@ class Trader:
                 
                 # 计算卖出金额并进行精度处理
                 sell_amount = self.calculate_sell_amount(quantity, current_price)
-                logger.info(f"卖出开仓: 数量={quantity} SOL, 价格={current_price}, 金额={sell_amount} (金额进行精度处理)")
+                
+                logger.info(f"🔴 卖出开仓详情:")
+                logger.info(f"   信号强度: {signal_strength:.2f}")
+                logger.info(f"   计算数量: {quantity:.6f} SOL")
+                logger.info(f"   当前价格: {current_price:.2f} USDT")
+                logger.info(f"   卖出金额: {sell_amount:.2f} USDT")
+                logger.info(f"   账户余额: {self.current_balance:.2f} USDT")
             
             # 下单
             response = self.place_order(side, quantity)
@@ -1316,6 +1368,24 @@ class Trader:
         current_price = self.get_current_price()
         win_rate = (self.win_count / self.trade_count * 100) if self.trade_count > 0 else 0
         
+        # 计算当前持仓的盈亏
+        current_pnl = 0
+        current_pnl_pct = 0
+        if self.current_position != 0 and current_price > 0 and self.entry_price > 0:
+            if self.current_position > 0:  # 多仓
+                current_pnl = (current_price - self.entry_price) * self.position_size
+                current_pnl_pct = ((current_price - self.entry_price) / self.entry_price * 100)
+            else:  # 空仓
+                current_pnl = (self.entry_price - current_price) * self.position_size
+                current_pnl_pct = ((self.entry_price - current_price) / self.entry_price * 100)
+        
+        # 计算仓位价值
+        position_value = self.position_size * current_price if current_price > 0 else 0
+        position_ratio = (position_value / self.current_balance * 100) if self.current_balance > 0 else 0
+        
+        # 计算回撤
+        drawdown = ((self.peak_balance - self.current_balance) / self.peak_balance * 100) if self.peak_balance > 0 else 0
+        
         status = f"""
 ╔══════════════════════════════════════════════════════════════╗
 ║                    📊 交易状态报告                            ║
@@ -1324,12 +1394,15 @@ class Trader:
 ║ 账户余额: {self.current_balance:.2f} USDT                    ║
 ║ 总盈亏: {self.total_pnl:.2f} USDT                           ║
 ║ 当前仓位: {self.current_position} ({'多仓' if self.current_position > 0 else '空仓' if self.current_position < 0 else '空仓'}) ║
-║ 仓位大小: {self.position_size:.4f}                          ║
+║ 仓位大小: {self.position_size:.6f} SOL                      ║
+║ 仓位价值: {position_value:.2f} USDT ({position_ratio:.1f}%) ║
 ║ 开仓价格: {self.entry_price:.2f} USDT                       ║
+║ 当前盈亏: {current_pnl:.2f} USDT ({current_pnl_pct:.2f}%)   ║
 ║ 交易次数: {self.trade_count}                                ║
 ║ 胜率: {win_rate:.1f}%                                       ║
 ║ 日盈亏: {self.daily_pnl:.2f} USDT                           ║
-║ 最大回撤: {((self.peak_balance - self.current_balance) / self.peak_balance * 100):.1f}% ║
+║ 最大回撤: {drawdown:.1f}%                                   ║
+║ 峰值余额: {self.peak_balance:.2f} USDT                      ║
 ╚══════════════════════════════════════════════════════════════╝
 """
         print(status)
@@ -1375,19 +1448,23 @@ class Trader:
                     self.last_signal_time = current_time
                     
                     if signal != 0 and strength > 0.3:  # 有效信号
-                        logger.info(f"生成信号: {signal}, 强度: {strength:.2f}")
+                        logger.info(f"🎯 生成交易信号:")
+                        logger.info(f"   信号方向: {'买入' if signal > 0 else '卖出'}")
+                        logger.info(f"   信号强度: {strength:.2f}")
+                        logger.info(f"   当前仓位: {'多仓' if self.current_position > 0 else '空仓' if self.current_position < 0 else '空仓'}")
                         
                         # 如果有持仓且信号相反，先平仓
                         if ((signal > 0 and self.current_position < 0) or 
                             (signal < 0 and self.current_position > 0)):
-                            logger.info("信号反转，平仓")
+                            logger.info("🔄 信号反转，执行平仓")
                             if self.close_position():
                                 # 平仓成功后等待一段时间，确保订单完全执行
-                                logger.info("等待平仓订单执行...")
+                                logger.info("⏳ 等待平仓订单执行...")
                                 time.sleep(3)  # 等待3秒
                         
                         # 如果没有持仓，开仓
                         if self.current_position == 0:
+                            logger.info("🚀 执行开仓操作")
                             self.open_position(signal, strength)
                     
                     # 检查止损止盈
@@ -1395,22 +1472,46 @@ class Trader:
                         current_price = self.get_current_price()
                         if current_price > 0:
                             if self.current_position > 0:  # 多仓
+                                # 计算当前盈亏
+                                current_pnl = (current_price - self.entry_price) * self.position_size
+                                current_pnl_pct = ((current_price - self.entry_price) / self.entry_price * 100)
+                                
                                 # 止损
                                 if current_price <= self.entry_price * (1 - self.stop_loss_pct):
-                                    logger.info("触发止损")
+                                    logger.info(f"🛑 触发止损:")
+                                    logger.info(f"   开仓价格: {self.entry_price:.2f} USDT")
+                                    logger.info(f"   当前价格: {current_price:.2f} USDT")
+                                    logger.info(f"   止损比例: {self.stop_loss_pct*100:.1f}%")
+                                    logger.info(f"   当前盈亏: {current_pnl:.2f} USDT ({current_pnl_pct:.2f}%)")
                                     self.close_position()
                                 # 止盈
                                 elif current_price >= self.entry_price * (1 + self.take_profit_pct):
-                                    logger.info("触发止盈")
+                                    logger.info(f"🎉 触发止盈:")
+                                    logger.info(f"   开仓价格: {self.entry_price:.2f} USDT")
+                                    logger.info(f"   当前价格: {current_price:.2f} USDT")
+                                    logger.info(f"   止盈比例: {self.take_profit_pct*100:.1f}%")
+                                    logger.info(f"   当前盈亏: {current_pnl:.2f} USDT ({current_pnl_pct:.2f}%)")
                                     self.close_position()
                             else:  # 空仓
+                                # 计算当前盈亏
+                                current_pnl = (self.entry_price - current_price) * self.position_size
+                                current_pnl_pct = ((self.entry_price - current_price) / self.entry_price * 100)
+                                
                                 # 止损
                                 if current_price >= self.entry_price * (1 + self.stop_loss_pct):
-                                    logger.info("触发止损")
+                                    logger.info(f"🛑 触发止损:")
+                                    logger.info(f"   开仓价格: {self.entry_price:.2f} USDT")
+                                    logger.info(f"   当前价格: {current_price:.2f} USDT")
+                                    logger.info(f"   止损比例: {self.stop_loss_pct*100:.1f}%")
+                                    logger.info(f"   当前盈亏: {current_pnl:.2f} USDT ({current_pnl_pct:.2f}%)")
                                     self.close_position()
                                 # 止盈
                                 elif current_price <= self.entry_price * (1 - self.take_profit_pct):
-                                    logger.info("触发止盈")
+                                    logger.info(f"🎉 触发止盈:")
+                                    logger.info(f"   开仓价格: {self.entry_price:.2f} USDT")
+                                    logger.info(f"   当前价格: {current_price:.2f} USDT")
+                                    logger.info(f"   止盈比例: {self.take_profit_pct*100:.1f}%")
+                                    logger.info(f"   当前盈亏: {current_pnl:.2f} USDT ({current_pnl_pct:.2f}%)")
                                     self.close_position()
                     
                     # 打印状态
