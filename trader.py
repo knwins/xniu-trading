@@ -138,20 +138,22 @@ class Trader:
             if response and 'symbols' in response:
                 for symbol_info in response['symbols']:
                     if symbol_info['symbol'] == self.symbol:
-                        # 找到对应的交易对
+                        # 直接使用baseAssetPrecision作为数量精度
+                        if 'baseAssetPrecision' in symbol_info:
+                            precision = symbol_info['baseAssetPrecision']
+                            logger.info(f"动态设置 {self.symbol} 数量精度: {precision} (baseAssetPrecision)")
+                            return precision
+                        
+                        # 如果没有baseAssetPrecision，尝试从LOT_SIZE过滤器计算
                         for filter_info in symbol_info['filters']:
                             if filter_info['filterType'] == 'LOT_SIZE':
-                                # 获取最小数量
-                                min_qty = float(filter_info['minQty'])
                                 step_size = float(filter_info['stepSize'])
-                                
-                                # 根据stepSize计算精度
                                 precision = self._calculate_precision_from_step_size(step_size)
                                 logger.info(f"动态设置 {self.symbol} 数量精度: {precision} (stepSize: {step_size})")
                                 return precision
                         
-                        # 如果没找到LOT_SIZE过滤器，使用默认值
-                        logger.warning(f"未找到 {self.symbol} 的LOT_SIZE过滤器，使用默认精度")
+                        # 如果都没找到，使用默认值
+                        logger.warning(f"未找到 {self.symbol} 的数量精度信息，使用默认精度")
                         return 3
                 
                 logger.warning(f"未找到交易对 {self.symbol} 的信息，使用默认精度")
@@ -174,17 +176,22 @@ class Trader:
             if response and 'symbols' in response:
                 for symbol_info in response['symbols']:
                     if symbol_info['symbol'] == self.symbol:
-                        # 找到对应的交易对
+                        # 直接使用quotePrecision作为价格精度
+                        if 'quotePrecision' in symbol_info:
+                            precision = symbol_info['quotePrecision']
+                            logger.info(f"动态设置 {self.symbol} 价格精度: {precision} (quotePrecision)")
+                            return precision
+                        
+                        # 如果没有quotePrecision，尝试从PRICE_FILTER过滤器计算
                         for filter_info in symbol_info['filters']:
                             if filter_info['filterType'] == 'PRICE_FILTER':
-                                # 获取价格精度
                                 tick_size = float(filter_info['tickSize'])
                                 precision = self._calculate_precision_from_step_size(tick_size)
                                 logger.info(f"动态设置 {self.symbol} 价格精度: {precision} (tickSize: {tick_size})")
                                 return precision
                         
-                        # 如果没找到PRICE_FILTER过滤器，使用默认值
-                        logger.warning(f"未找到 {self.symbol} 的PRICE_FILTER过滤器，使用默认精度")
+                        # 如果都没找到，使用默认值
+                        logger.warning(f"未找到 {self.symbol} 的价格精度信息，使用默认精度")
                         return 2
                 
                 logger.warning(f"未找到交易对 {self.symbol} 的信息，使用默认精度")
@@ -268,21 +275,13 @@ class Trader:
         # 使用Decimal进行精确舍入
         decimal_quantity = Decimal(str(quantity))
         
-        # 根据精度创建舍入格式
+        # 动态创建舍入格式
         if self.quantity_precision == 0:
             rounding_format = Decimal('1')
-        elif self.quantity_precision == 1:
-            rounding_format = Decimal('0.1')
-        elif self.quantity_precision == 2:
-            rounding_format = Decimal('0.01')
-        elif self.quantity_precision == 3:
-            rounding_format = Decimal('0.001')
-        elif self.quantity_precision == 4:
-            rounding_format = Decimal('0.0001')
-        elif self.quantity_precision == 5:
-            rounding_format = Decimal('0.00001')
         else:
-            rounding_format = Decimal('0.001')  # 默认3位小数
+            # 创建对应精度的舍入格式
+            format_str = '0.' + '0' * self.quantity_precision
+            rounding_format = Decimal(format_str)
         
         rounded_quantity = decimal_quantity.quantize(rounding_format, rounding=ROUND_DOWN)
         
@@ -304,21 +303,13 @@ class Trader:
         # 使用Decimal进行精确舍入
         decimal_price = Decimal(str(price))
         
-        # 根据精度创建舍入格式
+        # 动态创建舍入格式
         if self.price_precision == 0:
             rounding_format = Decimal('1')
-        elif self.price_precision == 1:
-            rounding_format = Decimal('0.1')
-        elif self.price_precision == 2:
-            rounding_format = Decimal('0.01')
-        elif self.price_precision == 3:
-            rounding_format = Decimal('0.001')
-        elif self.price_precision == 4:
-            rounding_format = Decimal('0.0001')
-        elif self.price_precision == 5:
-            rounding_format = Decimal('0.00001')
         else:
-            rounding_format = Decimal('0.01')  # 默认2位小数
+            # 创建对应精度的舍入格式
+            format_str = '0.' + '0' * self.price_precision
+            rounding_format = Decimal(format_str)
         
         rounded_price = decimal_price.quantize(rounding_format, rounding=ROUND_DOWN)
         
