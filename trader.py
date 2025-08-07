@@ -138,19 +138,19 @@ class Trader:
             if response and 'symbols' in response:
                 for symbol_info in response['symbols']:
                     if symbol_info['symbol'] == self.symbol:
-                        # 直接使用baseAssetPrecision作为数量精度
-                        if 'baseAssetPrecision' in symbol_info:
-                            precision = symbol_info['baseAssetPrecision']
-                            logger.info(f"动态设置 {self.symbol} 数量精度: {precision} (baseAssetPrecision)")
-                            return precision
-                        
-                        # 如果没有baseAssetPrecision，尝试从LOT_SIZE过滤器计算
+                        # 优先使用LOT_SIZE过滤器的stepSize计算精度
                         for filter_info in symbol_info['filters']:
                             if filter_info['filterType'] == 'LOT_SIZE':
                                 step_size = float(filter_info['stepSize'])
                                 precision = self._calculate_precision_from_step_size(step_size)
                                 logger.info(f"动态设置 {self.symbol} 数量精度: {precision} (stepSize: {step_size})")
                                 return precision
+                        
+                        # 如果没有LOT_SIZE过滤器，使用baseAssetPrecision
+                        if 'baseAssetPrecision' in symbol_info:
+                            precision = symbol_info['baseAssetPrecision']
+                            logger.info(f"动态设置 {self.symbol} 数量精度: {precision} (baseAssetPrecision)")
+                            return precision
                         
                         # 如果都没找到，使用默认值
                         logger.warning(f"未找到 {self.symbol} 的数量精度信息，使用默认精度")
@@ -176,19 +176,19 @@ class Trader:
             if response and 'symbols' in response:
                 for symbol_info in response['symbols']:
                     if symbol_info['symbol'] == self.symbol:
-                        # 直接使用quotePrecision作为价格精度
-                        if 'quotePrecision' in symbol_info:
-                            precision = symbol_info['quotePrecision']
-                            logger.info(f"动态设置 {self.symbol} 价格精度: {precision} (quotePrecision)")
-                            return precision
-                        
-                        # 如果没有quotePrecision，尝试从PRICE_FILTER过滤器计算
+                        # 优先使用PRICE_FILTER过滤器的tickSize计算精度
                         for filter_info in symbol_info['filters']:
                             if filter_info['filterType'] == 'PRICE_FILTER':
                                 tick_size = float(filter_info['tickSize'])
                                 precision = self._calculate_precision_from_step_size(tick_size)
                                 logger.info(f"动态设置 {self.symbol} 价格精度: {precision} (tickSize: {tick_size})")
                                 return precision
+                        
+                        # 如果没有PRICE_FILTER过滤器，使用quotePrecision
+                        if 'quotePrecision' in symbol_info:
+                            precision = symbol_info['quotePrecision']
+                            logger.info(f"动态设置 {self.symbol} 价格精度: {precision} (quotePrecision)")
+                            return precision
                         
                         # 如果都没找到，使用默认值
                         logger.warning(f"未找到 {self.symbol} 的价格精度信息，使用默认精度")
