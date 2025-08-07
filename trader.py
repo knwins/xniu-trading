@@ -18,7 +18,7 @@ import requests
 import hmac
 import hashlib
 import urllib.parse
-from decimal import Decimal, ROUND_DOWN
+from decimal import Decimal, ROUND_DOWN, ROUND_UP, ROUND_HALF_UP
 
 # 添加父目录到Python路径，以便导入根目录中的模块
 import sys
@@ -263,8 +263,17 @@ class Trader:
             logger.error(f"获取最小数量异常: {e}，使用默认最小数量")
             return 0.001
     
-    def _round_quantity(self, quantity: float) -> float:
-        """舍入数量到指定精度"""
+    def _round_quantity(self, quantity: float, rounding_mode: str = 'DOWN') -> float:
+        """
+        根据交易所精度要求舍入数量
+        
+        Args:
+            quantity: 原始数量
+            rounding_mode: 舍入模式 ('DOWN', 'UP', 'NEAREST')
+        
+        Returns:
+            舍入后的数量
+        """
         if quantity <= 0:
             return 0.0
         
@@ -283,7 +292,13 @@ class Trader:
             format_str = '0.' + '0' * self.quantity_precision
             rounding_format = Decimal(format_str)
         
-        rounded_quantity = decimal_quantity.quantize(rounding_format, rounding=ROUND_DOWN)
+        # 根据模式选择舍入方式
+        if rounding_mode == 'UP':
+            rounded_quantity = decimal_quantity.quantize(rounding_format, rounding=ROUND_UP)
+        elif rounding_mode == 'NEAREST':
+            rounded_quantity = decimal_quantity.quantize(rounding_format, rounding=ROUND_HALF_UP)
+        else:  # DOWN
+            rounded_quantity = decimal_quantity.quantize(rounding_format, rounding=ROUND_DOWN)
         
         # 确保数量不为0
         if rounded_quantity <= 0:
@@ -291,8 +306,17 @@ class Trader:
             
         return float(rounded_quantity)
     
-    def _round_price(self, price: float) -> float:
-        """舍入价格到指定精度"""
+    def _round_price(self, price: float, rounding_mode: str = 'NEAREST') -> float:
+        """
+        根据交易所精度要求舍入价格
+        
+        Args:
+            price: 原始价格
+            rounding_mode: 舍入模式 ('DOWN', 'UP', 'NEAREST')
+        
+        Returns:
+            舍入后的价格
+        """
         if price <= 0:
             return 0.0
         
@@ -311,9 +335,52 @@ class Trader:
             format_str = '0.' + '0' * self.price_precision
             rounding_format = Decimal(format_str)
         
-        rounded_price = decimal_price.quantize(rounding_format, rounding=ROUND_DOWN)
+        # 根据模式选择舍入方式
+        if rounding_mode == 'UP':
+            rounded_price = decimal_price.quantize(rounding_format, rounding=ROUND_UP)
+        elif rounding_mode == 'DOWN':
+            rounded_price = decimal_price.quantize(rounding_format, rounding=ROUND_DOWN)
+        else:  # NEAREST
+            rounded_price = decimal_price.quantize(rounding_format, rounding=ROUND_HALF_UP)
         
         return float(rounded_price)
+    
+    def refresh_precision_info(self) -> bool:
+        """
+        动态刷新交易对精度信息
+        
+        Returns:
+            是否刷新成功
+        """
+        try:
+            logger.info("正在刷新交易对精度信息...")
+            
+            # 重新获取精度信息
+            old_qty_precision = self.quantity_precision
+            old_price_precision = self.price_precision
+            old_min_qty = self.min_quantity
+            
+            self.quantity_precision = self._get_quantity_precision()
+            self.price_precision = self._get_price_precision()
+            self.min_quantity = self._get_min_quantity()
+            
+            # 检查是否有变化
+            if (old_qty_precision != self.quantity_precision or 
+                old_price_precision != self.price_precision or 
+                old_min_qty != self.min_quantity):
+                
+                logger.info(f"精度信息已更新:")
+                logger.info(f"  数量精度: {old_qty_precision} -> {self.quantity_precision}")
+                logger.info(f"  价格精度: {old_price_precision} -> {self.price_precision}")
+                logger.info(f"  最小数量: {old_min_qty} -> {self.min_quantity}")
+                return True
+            else:
+                logger.info("精度信息无变化")
+                return True
+                
+        except Exception as e:
+            logger.error(f"刷新精度信息失败: {e}")
+            return False
     
     def _validate_quantity(self, quantity: float) -> bool:
         """验证数量是否符合交易所要求"""
@@ -792,7 +859,20 @@ class Trader:
             return pd.DataFrame()
     
     def calculate_position_size(self, price: float, signal_strength: float) -> float:
-        """计算仓位大小"""
+        """
+        智能计算仓位大小，考虑精度要求
+        
+        Args:
+            price: 当前价格
+            signal_strength: 信号强度 (0-1)
+        
+        Returns:
+            符合精度要求的仓位大小
+        """
+        if price <= 0:
+            return 0.0
+        
+        # 计算可用资金
         available_balance = self.current_balance * self.max_position_size
         position_value = available_balance * signal_strength
         
@@ -802,23 +882,52 @@ class Trader:
         elif signal_strength > 0.7:
             position_value *= 1.2  # 强信号，增加仓位
         
-        quantity = position_value / price
+        # 计算原始数量
+        raw_quantity = position_value / price
         
-        # 应用精度处理
-        quantity = self._round_quantity(quantity)
+        # 应用精度处理（向下舍入确保不超出资金）
+        quantity = self._round_quantity(raw_quantity, 'DOWN')
         
         # 验证数量
         if not self._validate_quantity(quantity):
             logger.warning(f"计算出的数量 {quantity} 不符合交易所要求")
-            return 0.0
+            
+            # 尝试使用最小数量
+            if self.min_quantity and self.min_quantity <= raw_quantity:
+                logger.info(f"使用最小数量: {self.min_quantity}")
+                return self.min_quantity
+            else:
+                return 0.0
+        
+        # 计算实际使用的资金
+        actual_value = quantity * price
+        logger.info(f"仓位计算: 原始数量={raw_quantity:.6f}, 精度处理后={quantity}, 使用资金={actual_value:.2f}")
         
         return quantity
     
-    def place_order(self, side: str, quantity: float, order_type: str = 'MARKET') -> Dict:
-        """下单"""
+    def place_order(self, side: str, quantity: float, order_type: str = 'MARKET', price: float = None) -> Dict:
+        """
+        下单
+        
+        Args:
+            side: 交易方向 ('BUY' 或 'SELL')
+            quantity: 数量
+            order_type: 订单类型 ('MARKET' 或 'LIMIT')
+            price: 价格 (限价单需要)
+        
+        Returns:
+            订单响应信息
+        """
         try:
+            # 根据交易方向选择舍入模式
+            # 买入时向下舍入，卖出时向上舍入，确保不会超出资金
+            if side == 'BUY':
+                rounding_mode = 'DOWN'
+            else:  # SELL
+                rounding_mode = 'UP'
+            
             # 应用精度处理
-            rounded_quantity = self._round_quantity(quantity)
+            rounded_quantity = self._round_quantity(quantity, rounding_mode)
             
             # 验证数量
             if not self._validate_quantity(rounded_quantity):
@@ -832,6 +941,14 @@ class Trader:
                 'type': order_type,
                 'quantity': rounded_quantity
             }
+            
+            # 如果是限价单，添加价格参数
+            if order_type == 'LIMIT' and price is not None:
+                rounded_price = self._round_price(price, 'NEAREST')
+                params['price'] = rounded_price
+                params['timeInForce'] = 'GTC'  # Good Till Cancel
+            
+            logger.info(f"下单参数: {side} {rounded_quantity} {self.symbol} @ {price if price else 'MARKET'}")
             
             response = self._make_request('POST', endpoint, params, signed=True)
             
