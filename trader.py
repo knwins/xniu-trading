@@ -905,6 +905,30 @@ class Trader:
         
         return quantity
     
+    def calculate_sell_amount(self, quantity: float, price: float) -> float:
+        """
+        计算卖出时的金额，并进行精度处理
+        
+        Args:
+            quantity: 卖出数量
+            price: 卖出价格
+        
+        Returns:
+            精度处理后的卖出金额
+        """
+        if quantity <= 0 or price <= 0:
+            return 0.0
+        
+        # 计算原始金额
+        raw_amount = quantity * price
+        
+        # 对金额进行精度处理（向上舍入确保获得最大收益）
+        amount = self._round_price(raw_amount, 'UP')
+        
+        logger.info(f"卖出金额计算: 数量={quantity}, 价格={price}, 原始金额={raw_amount:.6f}, 精度处理后={amount:.2f}")
+        
+        return amount
+    
     def place_order(self, side: str, quantity: float, order_type: str = 'MARKET', price: float = None) -> Dict:
         """
         下单
@@ -942,10 +966,9 @@ class Trader:
                 'quantity': rounded_quantity
             }
             
-            # 如果是限价单，添加价格参数
+            # 如果是限价单，添加价格参数（不进行精度处理）
             if order_type == 'LIMIT' and price is not None:
-                rounded_price = self._round_price(price, 'NEAREST')
-                params['price'] = rounded_price
+                params['price'] = price  # 直接使用原始价格，不进行精度处理
                 params['timeInForce'] = 'GTC'  # Good Till Cancel
             
             logger.info(f"下单参数: {side} {rounded_quantity} {self.symbol} @ {price if price else 'MARKET'}")
@@ -1019,7 +1042,12 @@ class Trader:
             return False
     
     def open_position(self, signal: int, signal_strength: float) -> bool:
-        """开仓"""
+        """
+        开仓
+        
+        买入时：只对SOL数量进行精度处理，价格不做处理
+        卖出时：只对卖出金额进行精度处理，价格不做处理
+        """
         if self.current_position != 0:
             logger.warning("已有持仓，无法开新仓")
             return False
@@ -1030,14 +1058,30 @@ class Trader:
                 logger.error("无法获取有效价格")
                 return False
             
-            # 计算仓位大小
-            quantity = self.calculate_position_size(current_price, signal_strength)
-            if quantity <= 0:
-                logger.warning("仓位大小计算为0，跳过开仓")
-                return False
-            
             # 确定交易方向
             side = 'BUY' if signal > 0 else 'SELL'
+            
+            if side == 'BUY':
+                # 买入：计算SOL数量并进行精度处理
+                quantity = self.calculate_position_size(current_price, signal_strength)
+                if quantity <= 0:
+                    logger.warning("仓位大小计算为0，跳过开仓")
+                    return False
+                
+                logger.info(f"买入开仓: 数量={quantity} SOL, 价格={current_price} (价格不做精度处理)")
+                
+            else:  # SELL
+                # 卖出：计算卖出金额并进行精度处理
+                # 这里需要根据您的策略计算卖出数量
+                # 暂时使用与买入相同的逻辑，但实际应用中可能需要不同的计算方式
+                quantity = self.calculate_position_size(current_price, signal_strength)
+                if quantity <= 0:
+                    logger.warning("仓位大小计算为0，跳过开仓")
+                    return False
+                
+                # 计算卖出金额并进行精度处理
+                sell_amount = self.calculate_sell_amount(quantity, current_price)
+                logger.info(f"卖出开仓: 数量={quantity} SOL, 价格={current_price}, 金额={sell_amount} (金额进行精度处理)")
             
             # 下单
             response = self.place_order(side, quantity)
